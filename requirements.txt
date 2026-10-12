@@ -1,0 +1,16 @@
+# Runtime
+pydantic>=2.5
+anthropic>=1.0
+numpy>=1.24
+rank-bm25>=0.2.2
+
+# Development / tests
+pytest>=8
+pytest-asyncio>=0.23
+
+# Optional: production embedders (uncomment one)
+# voyageai>=0.2
+# sentence-transformers>=2.2
+
+# Optional: distributed cache backend
+# redis>=5

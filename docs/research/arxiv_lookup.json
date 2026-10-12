@@ -1,0 +1,1808 @@
+{
+ "2403.12031": {
+  "title": "RouterBench: A Benchmark for Multi-LLM Routing System",
+  "first_author": "Qitian Jason Hu",
+  "n_authors": 8,
+  "year": "2024"
+ },
+ "2404.13208": {
+  "title": "The Instruction Hierarchy: Training LLMs to Prioritize Privileged Instructions",
+  "first_author": "Eric Wallace",
+  "n_authors": 6,
+  "year": "2024"
+ },
+ "2402.06363": {
+  "title": "StruQ: Defending Against Prompt Injection with Structured Queries",
+  "first_author": "Sizhe Chen",
+  "n_authors": 4,
+  "year": "2024"
+ },
+ "2406.16218": {
+  "title": "Trace is the Next AutoDiff: Generative Optimization with Rich Feedback, Execution Traces, and LLMs",
+  "first_author": "Ching-An Cheng",
+  "n_authors": 3,
+  "year": "2024"
+ },
+ "2406.13352": {
+  "title": "AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents",
+  "first_author": "Edoardo Debenedetti",
+  "n_authors": 6,
+  "year": "2024"
+ },
+ "2405.19888": {
+  "title": "Parrot: Efficient Serving of LLM-based Applications with Semantic Variable",
+  "first_author": "Chaofan Lin",
+  "n_authors": 7,
+  "year": "2024"
+ },
+ "2403.19708": {
+  "title": "Cost-Efficient Large Language Model Serving for Multi-turn Conversations with CachedAttention",
+  "first_author": "Bin Gao",
+  "n_authors": 9,
+  "year": "2024"
+ },
+ "2403.12968": {
+  "title": "LLMLingua-2: Data Distillation for Efficient and Faithful Task-Agnostic Prompt Compression",
+  "first_author": "Zhuoshi Pan",
+  "n_authors": 13,
+  "year": "2024"
+ },
+ "2402.07867": {
+  "title": "PoisonedRAG: Knowledge Corruption Attacks to Retrieval-Augmented Generation of Large Language Models",
+  "first_author": "Wei Zou",
+  "n_authors": 4,
+  "year": "2024"
+ },
+ "2406.07496": {
+  "title": "TextGrad: Automatic \"Differentiation\" via Text",
+  "first_author": "Mert Yuksekgonul",
+  "n_authors": 7,
+  "year": "2024"
+ },
+ "2402.01817": {
+  "title": "LLMs Can't Plan, But Can Help Planning in LLM-Modulo Frameworks",
+  "first_author": "Subbarao Kambhampati",
+  "n_authors": 8,
+  "year": "2024"
+ },
+ "2403.02310": {
+  "title": "Taming Throughput-Latency Tradeoff in LLM Inference with Sarathi-Serve",
+  "first_author": "Amey Agrawal",
+  "n_authors": 8,
+  "year": "2024"
+ },
+ "2403.02694": {
+  "title": "MeanCache: User-Centric Semantic Caching for LLM Web Services",
+  "first_author": "Waris Gill",
+  "n_authors": 6,
+  "year": "2024"
+ },
+ "2402.03216": {
+  "title": "M3-Embedding: Multi-Linguality, Multi-Functionality, Multi-Granularity Text Embeddings Through Self-Knowledge Distillation",
+  "first_author": "Jianlv Chen",
+  "n_authors": 6,
+  "year": "2024"
+ },
+ "2405.13576": {
+  "title": "FlashRAG: A Modular Toolkit for Efficient Retrieval-Augmented Generation Research",
+  "first_author": "Jiajie Jin",
+  "n_authors": 10,
+  "year": "2024"
+ },
+ "2406.06608": {
+  "title": "The Prompt Report: A Systematic Survey of Prompt Engineering Techniques",
+  "first_author": "Sander Schulhoff",
+  "n_authors": 31,
+  "year": "2024"
+ },
+ "2407.00079": {
+  "title": "Mooncake: A KVCache-centric Disaggregated Architecture for LLM Serving",
+  "first_author": "Ruoyu Qin",
+  "n_authors": 7,
+  "year": "2024"
+ },
+ "2402.02057": {
+  "title": "Break the Sequential Dependency of LLM Inference Using Lookahead Decoding",
+  "first_author": "Yichao Fu",
+  "n_authors": 4,
+  "year": "2024"
+ },
+ "2403.14720": {
+  "title": "Defending Against Indirect Prompt Injection Attacks With Spotlighting",
+  "first_author": "Keegan Hines",
+  "n_authors": 6,
+  "year": "2024"
+ },
+ "2406.15927": {
+  "title": "Semantic Entropy Probes: Robust and Cheap Hallucination Detection in LLMs",
+  "first_author": "Jannik Kossen",
+  "n_authors": 6,
+  "year": "2024"
+ },
+ "2406.04692": {
+  "title": "Mixture-of-Agents Enhances Large Language Model Capabilities",
+  "first_author": "Junlin Wang",
+  "n_authors": 5,
+  "year": "2024"
+ },
+ "2402.05120": {
+  "title": "More Agents Is All You Need",
+  "first_author": "Junyou Li",
+  "n_authors": 5,
+  "year": "2024"
+ },
+ "2405.16444": {
+  "title": "CacheBlend: Fast Large Language Model Serving for RAG with Cached Knowledge Fusion",
+  "first_author": "Jiayi Yao",
+  "n_authors": 9,
+  "year": "2024"
+ },
+ "2404.16130": {
+  "title": "From Local to Global: A Graph RAG Approach to Query-Focused Summarization",
+  "first_author": "Darren Edge",
+  "n_authors": 10,
+  "year": "2024"
+ },
+ "2402.02716": {
+  "title": "Understanding the planning of LLM agents: A survey",
+  "first_author": "Xu Huang",
+  "n_authors": 9,
+  "year": "2024"
+ },
+ "2404.12457": {
+  "title": "RAGCache: Efficient Knowledge Caching for Retrieval-Augmented Generation",
+  "first_author": "Chao Jin",
+  "n_authors": 7,
+  "year": "2024"
+ },
+ "2404.18796": {
+  "title": "Replacing Judges with Juries: Evaluating LLM Generations with a Panel of Diverse Models",
+  "first_author": "Pat Verga",
+  "n_authors": 9,
+  "year": "2024"
+ },
+ "2403.10131": {
+  "title": "RAFT: Adapting Language Model to Domain Specific RAG",
+  "first_author": "Tianjun Zhang",
+  "n_authors": 7,
+  "year": "2024"
+ },
+ "2402.15220": {
+  "title": "ChunkAttention: Efficient Self-Attention with Prefix-Aware KV Cache and Two-Phase Partition",
+  "first_author": "Lu Ye",
+  "n_authors": 4,
+  "year": "2024"
+ },
+ "2407.00023": {
+  "title": "Preble: Efficient Distributed Prompt Scheduling for LLM Serving",
+  "first_author": "Vikranth Srivatsa",
+  "n_authors": 5,
+  "year": "2024"
+ },
+ "2406.00025": {
+  "title": "SCALM: Towards Semantic Caching for Automated Chat Services with Large Language Models",
+  "first_author": "Jiaxing Li",
+  "n_authors": 6,
+  "year": "2024"
+ },
+ "2404.11018": {
+  "title": "Many-Shot In-Context Learning",
+  "first_author": "Rishabh Agarwal",
+  "n_authors": 15,
+  "year": "2024"
+ },
+ "2405.14831": {
+  "title": "HippoRAG: Neurobiologically Inspired Long-Term Memory for Large Language Models",
+  "first_author": "Bernal Jiménez Gutiérrez",
+  "n_authors": 5,
+  "year": "2024"
+ },
+ "2402.10178": {
+  "title": "TDAG: A Multi-Agent Framework based on Dynamic Task Decomposition and Agent Generation",
+  "first_author": "Yaoxiang Wang",
+  "n_authors": 4,
+  "year": "2024"
+ },
+ "2402.10978": {
+  "title": "Language Models with Conformal Factuality Guarantees",
+  "first_author": "Christopher Mohri",
+  "n_authors": 2,
+  "year": "2024"
+ },
+ "2403.04871": {
+  "title": "ACORN: Performant and Predicate-Agnostic Search Over Vector Embeddings and Structured Data",
+  "first_author": "Liana Patel",
+  "n_authors": 4,
+  "year": "2024"
+ },
+ "2406.12045": {
+  "title": "$τ$-bench: A Benchmark for Tool-Agent-User Interaction in Real-World Domains",
+  "first_author": "Shunyu Yao",
+  "n_authors": 4,
+  "year": "2024"
+ },
+ "2404.14294": {
+  "title": "A Survey on Efficient Inference for Large Language Models",
+  "first_author": "Zixuan Zhou",
+  "n_authors": 15,
+  "year": "2024"
+ },
+ "2402.03620": {
+  "title": "Self-Discover: Large Language Models Self-Compose Reasoning Structures",
+  "first_author": "Pei Zhou",
+  "n_authors": 10,
+  "year": "2024"
+ },
+ "2403.06789": {
+  "title": "SPLADE-v3: New baselines for SPLADE",
+  "first_author": "Carlos Lassance",
+  "n_authors": 4,
+  "year": "2024"
+ },
+ "2403.14403": {
+  "title": "Adaptive-RAG: Learning to Adapt Retrieval-Augmented Large Language Models through Question Complexity",
+  "first_author": "Soyeong Jeong",
+  "n_authors": 5,
+  "year": "2024"
+ },
+ "2402.10200": {
+  "title": "Chain-of-Thought Reasoning Without Prompting",
+  "first_author": "Xuezhi Wang",
+  "n_authors": 2,
+  "year": "2024"
+ },
+ "2406.01297": {
+  "title": "When Can LLMs Actually Correct Their Own Mistakes? A Critical Survey of Self-Correction of LLMs",
+  "first_author": "Ryo Kamoi",
+  "n_authors": 5,
+  "year": "2024"
+ },
+ "2404.13076": {
+  "title": "LLM Evaluators Recognize and Favor Their Own Generations",
+  "first_author": "Arjun Panickssery",
+  "n_authors": 3,
+  "year": "2024"
+ },
+ "2404.14618": {
+  "title": "Hybrid LLM: Cost-Efficient and Quality-Aware Query Routing",
+  "first_author": "Dujian Ding",
+  "n_authors": 8,
+  "year": "2024"
+ },
+ "2404.04475": {
+  "title": "Length-Controlled AlpacaEval: A Simple Way to Debias Automatic Evaluators",
+  "first_author": "Yann Dubois",
+  "n_authors": 4,
+  "year": "2024"
+ },
+ "2403.13787": {
+  "title": "RewardBench: Evaluating Reward Models for Language Modeling",
+  "first_author": "Nathan Lambert",
+  "n_authors": 12,
+  "year": "2024"
+ },
+ "2402.05099": {
+  "title": "Hydragen: High-Throughput LLM Inference with Shared Prefixes",
+  "first_author": "Jordan Juravsky",
+  "n_authors": 6,
+  "year": "2024"
+ },
+ "2406.11695": {
+  "title": "Optimizing Instructions and Demonstrations for Multi-Stage Language Model Programs",
+  "first_author": "Krista Opsahl-Ong",
+  "n_authors": 7,
+  "year": "2024"
+ },
+ "2406.18665": {
+  "title": "RouteLLM: Learning to Route LLMs with Preference Data",
+  "first_author": "Isaac Ong",
+  "n_authors": 8,
+  "year": "2024"
+ },
+ "2510.11977": {
+  "title": "Holistic Agent Leaderboard: The Missing Infrastructure for AI Agent Evaluation",
+  "first_author": "Sayash Kapoor",
+  "n_authors": 31,
+  "year": "2025"
+ },
+ "2207.10397": {
+  "title": "CodeT: Code Generation with Generated Tests",
+  "first_author": "Bei Chen",
+  "n_authors": 7,
+  "year": "2022"
+ },
+ "2210.03493": {
+  "title": "Automatic Chain of Thought Prompting in Large Language Models",
+  "first_author": "Zhuosheng Zhang",
+  "n_authors": 4,
+  "year": "2022"
+ },
+ "2210.02406": {
+  "title": "Decomposed Prompting: A Modular Approach for Solving Complex Tasks",
+  "first_author": "Tushar Khot",
+  "n_authors": 7,
+  "year": "2022"
+ },
+ "2206.10498": {
+  "title": "PlanBench: An Extensible Benchmark for Evaluating Large Language Models on Planning and Reasoning about Change",
+  "first_author": "Karthik Valmeekam",
+  "n_authors": 5,
+  "year": "2022"
+ },
+ "2205.10625": {
+  "title": "Least-to-Most Prompting Enables Complex Reasoning in Large Language Models",
+  "first_author": "Denny Zhou",
+  "n_authors": 11,
+  "year": "2022"
+ },
+ "2205.13147": {
+  "title": "Matryoshka Representation Learning",
+  "first_author": "Aditya Kusupati",
+  "n_authors": 11,
+  "year": "2022"
+ },
+ "2205.14334": {
+  "title": "Teaching Models to Express Their Uncertainty in Words",
+  "first_author": "Stephanie Lin",
+  "n_authors": 3,
+  "year": "2022"
+ },
+ "2210.03629": {
+  "title": "ReAct: Synergizing Reasoning and Acting in Language Models",
+  "first_author": "Shunyu Yao",
+  "n_authors": 7,
+  "year": "2022"
+ },
+ "2211.09527": {
+  "title": "Ignore Previous Prompt: Attack Techniques For Language Models",
+  "first_author": "Fábio Perez",
+  "n_authors": 2,
+  "year": "2022"
+ },
+ "2211.12588": {
+  "title": "Program of Thoughts Prompting: Disentangling Computation from Reasoning for Numerical Reasoning Tasks",
+  "first_author": "Wenhu Chen",
+  "n_authors": 4,
+  "year": "2022"
+ },
+ "2211.01910": {
+  "title": "Large Language Models Are Human-Level Prompt Engineers",
+  "first_author": "Yongchao Zhou",
+  "n_authors": 7,
+  "year": "2022"
+ },
+ "2208.03299": {
+  "title": "Atlas: Few-shot Learning with Retrieval Augmented Language Models",
+  "first_author": "Gautier Izacard",
+  "n_authors": 10,
+  "year": "2022"
+ },
+ "2210.03350": {
+  "title": "Measuring and Narrowing the Compositionality Gap in Language Models",
+  "first_author": "Ofir Press",
+  "n_authors": 6,
+  "year": "2022"
+ },
+ "2210.08726": {
+  "title": "RARR: Researching and Revising What Language Models Say, Using Language Models",
+  "first_author": "Luyu Gao",
+  "n_authors": 11,
+  "year": "2022"
+ },
+ "2210.07316": {
+  "title": "MTEB: Massive Text Embedding Benchmark",
+  "first_author": "Niklas Muennighoff",
+  "n_authors": 4,
+  "year": "2022"
+ },
+ "2207.05221": {
+  "title": "Language Models (Mostly) Know What They Know",
+  "first_author": "Saurav Kadavath",
+  "n_authors": 36,
+  "year": "2022"
+ },
+ "2207.10342": {
+  "title": "Language Model Cascades",
+  "first_author": "David Dohan",
+  "n_authors": 12,
+  "year": "2022"
+ },
+ "2209.11755": {
+  "title": "Promptagator: Few-shot Dense Retrieval From 8 Examples",
+  "first_author": "Zhuyun Dai",
+  "n_authors": 10,
+  "year": "2022"
+ },
+ "2210.10634": {
+  "title": "RankT5: Fine-Tuning T5 for Text Ranking with Ranking Losses",
+  "first_author": "Honglei Zhuang",
+  "n_authors": 9,
+  "year": "2022"
+ },
+ "2210.10760": {
+  "title": "Scaling Laws for Reward Model Overoptimization",
+  "first_author": "Leo Gao",
+  "n_authors": 3,
+  "year": "2022"
+ },
+ "2210.11934": {
+  "title": "An Analysis of Fusion Functions for Hybrid Retrieval",
+  "first_author": "Sebastian Bruch",
+  "n_authors": 3,
+  "year": "2022"
+ },
+ "2211.10435": {
+  "title": "PAL: Program-aided Language Models",
+  "first_author": "Luyu Gao",
+  "n_authors": 8,
+  "year": "2022"
+ },
+ "2205.09707": {
+  "title": "PLAID: An Efficient Engine for Late Interaction Retrieval",
+  "first_author": "Keshav Santhanam",
+  "n_authors": 4,
+  "year": "2022"
+ },
+ "2206.02336": {
+  "title": "Making Large Language Models Better Reasoners with Step-Aware Verifier",
+  "first_author": "Yifei Li",
+  "n_authors": 7,
+  "year": "2022"
+ },
+ "2205.11916": {
+  "title": "Large Language Models are Zero-Shot Reasoners",
+  "first_author": "Takeshi Kojima",
+  "n_authors": 5,
+  "year": "2022"
+ },
+ "2304.09542": {
+  "title": "Is ChatGPT Good at Search? Investigating Large Language Models as Re-Ranking Agents",
+  "first_author": "Weiwei Sun",
+  "n_authors": 8,
+  "year": "2023"
+ },
+ "2212.03533": {
+  "title": "Text Embeddings by Weakly-Supervised Contrastive Pre-training",
+  "first_author": "Liang Wang",
+  "n_authors": 8,
+  "year": "2022"
+ },
+ "2301.03266": {
+  "title": "Doc2Query--: When Less is More",
+  "first_author": "Mitko Gospodinov",
+  "n_authors": 3,
+  "year": "2023"
+ },
+ "2211.17192": {
+  "title": "Fast Inference from Transformers via Speculative Decoding",
+  "first_author": "Yaniv Leviathan",
+  "n_authors": 3,
+  "year": "2022"
+ },
+ "2212.09561": {
+  "title": "Large Language Models are Better Reasoners with Self-Verification",
+  "first_author": "Yixuan Weng",
+  "n_authors": 9,
+  "year": "2022"
+ },
+ "2212.04092": {
+  "title": "Successive Prompting for Decomposing Complex Questions",
+  "first_author": "Dheeru Dua",
+  "n_authors": 4,
+  "year": "2022"
+ },
+ "2302.12173": {
+  "title": "Not what you've signed up for: Compromising Real-World LLM-Integrated Applications with Indirect Prompt Injection",
+  "first_author": "Kai Greshake",
+  "n_authors": 6,
+  "year": "2023"
+ },
+ "2212.10496": {
+  "title": "Precise Zero-Shot Dense Retrieval without Relevance Labels",
+  "first_author": "Luyu Gao",
+  "n_authors": 4,
+  "year": "2022"
+ },
+ "2303.16634": {
+  "title": "G-Eval: NLG Evaluation using GPT-4 with Better Human Alignment",
+  "first_author": "Yang Liu",
+  "n_authors": 6,
+  "year": "2023"
+ },
+ "2305.03268": {
+  "title": "Verify-and-Edit: A Knowledge-Enhanced Chain-of-Thought Framework",
+  "first_author": "Ruochen Zhao",
+  "n_authors": 5,
+  "year": "2023"
+ },
+ "2305.03495": {
+  "title": "Automatic Prompt Optimization with \"Gradient Descent\" and Beam Search",
+  "first_author": "Reid Pryzant",
+  "n_authors": 6,
+  "year": "2023"
+ },
+ "2303.17651": {
+  "title": "Self-Refine: Iterative Refinement with Self-Feedback",
+  "first_author": "Aman Madaan",
+  "n_authors": 16,
+  "year": "2023"
+ },
+ "2302.09664": {
+  "title": "Semantic Uncertainty: Linguistic Invariances for Uncertainty Estimation in Natural Language Generation",
+  "first_author": "Lorenz Kuhn",
+  "n_authors": 3,
+  "year": "2023"
+ },
+ "2303.11366": {
+  "title": "Reflexion: Language Agents with Verbal Reinforcement Learning",
+  "first_author": "Noah Shinn",
+  "n_authors": 6,
+  "year": "2023"
+ },
+ "2302.00093": {
+  "title": "Large Language Models Can Be Easily Distracted by Irrelevant Context",
+  "first_author": "Freda Shi",
+  "n_authors": 8,
+  "year": "2023"
+ },
+ "2302.01318": {
+  "title": "Accelerating Large Language Model Decoding with Speculative Sampling",
+  "first_author": "Charlie Chen",
+  "n_authors": 6,
+  "year": "2023"
+ },
+ "2212.10509": {
+  "title": "Interleaving Retrieval with Chain-of-Thought Reasoning for Knowledge-Intensive Multi-Step Questions",
+  "first_author": "Harsh Trivedi",
+  "n_authors": 4,
+  "year": "2022"
+ },
+ "2212.10511": {
+  "title": "When Not to Trust Language Models: Investigating Effectiveness of Parametric and Non-Parametric Memories",
+  "first_author": "Alex Mallen",
+  "n_authors": 6,
+  "year": "2022"
+ },
+ "2303.07678": {
+  "title": "Query2doc: Query Expansion with Large Language Models",
+  "first_author": "Liang Wang",
+  "n_authors": 3,
+  "year": "2023"
+ },
+ "2305.04091": {
+  "title": "Plan-and-Solve Prompting: Improving Zero-Shot Chain-of-Thought Reasoning by Large Language Models",
+  "first_author": "Lei Wang",
+  "n_authors": 7,
+  "year": "2023"
+ },
+ "2303.17580": {
+  "title": "HuggingGPT: Solving AI Tasks with ChatGPT and its Friends in Hugging Face",
+  "first_author": "Yongliang Shen",
+  "n_authors": 6,
+  "year": "2023"
+ },
+ "2303.08896": {
+  "title": "SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models",
+  "first_author": "Potsawee Manakul",
+  "n_authors": 3,
+  "year": "2023"
+ },
+ "2301.12652": {
+  "title": "REPLUG: Retrieval-Augmented Black-Box Language Models",
+  "first_author": "Weijia Shi",
+  "n_authors": 8,
+  "year": "2023"
+ },
+ "2304.11477": {
+  "title": "LLM+P: Empowering Large Language Models with Optimal Planning Proficiency",
+  "first_author": "Bo Liu",
+  "n_authors": 7,
+  "year": "2023"
+ },
+ "2305.03653": {
+  "title": "Query Expansion by Prompting Large Language Models",
+  "first_author": "Rolf Jagerman",
+  "n_authors": 5,
+  "year": "2023"
+ },
+ "2305.17926": {
+  "title": "Large Language Models are not Fair Evaluators",
+  "first_author": "Peiyi Wang",
+  "n_authors": 10,
+  "year": "2023"
+ },
+ "2306.03872": {
+  "title": "Deductive Verification of Chain-of-Thought Reasoning",
+  "first_author": "Zhan Ling",
+  "n_authors": 7,
+  "year": "2023"
+ },
+ "2305.05176": {
+  "title": "FrugalGPT: How to Use Large Language Models While Reducing Cost and Improving Performance",
+  "first_author": "Lingjiao Chen",
+  "n_authors": 3,
+  "year": "2023"
+ },
+ "2305.13971": {
+  "title": "Grammar-Constrained Decoding for Structured NLP Tasks without Finetuning",
+  "first_author": "Saibo Geng",
+  "n_authors": 4,
+  "year": "2023"
+ },
+ "2305.14627": {
+  "title": "Enabling Large Language Models to Generate Text with Citations",
+  "first_author": "Tianyu Gao",
+  "n_authors": 4,
+  "year": "2023"
+ },
+ "2305.14975": {
+  "title": "Just Ask for Calibration: Strategies for Eliciting Calibrated Confidence Scores from Language Models Fine-Tuned with Human Feedback",
+  "first_author": "Katherine Tian",
+  "n_authors": 8,
+  "year": "2023"
+ },
+ "2305.16291": {
+  "title": "Voyager: An Open-Ended Embodied Agent with Large Language Models",
+  "first_author": "Guanzhi Wang",
+  "n_authors": 8,
+  "year": "2023"
+ },
+ "2305.15771": {
+  "title": "On the Planning Abilities of Large Language Models : A Critical Investigation",
+  "first_author": "Karthik Valmeekam",
+  "n_authors": 4,
+  "year": "2023"
+ },
+ "2305.18323": {
+  "title": "ReWOO: Decoupling Reasoning from Observations for Efficient Augmented Language Models",
+  "first_author": "Binfeng Xu",
+  "n_authors": 6,
+  "year": "2023"
+ },
+ "2305.20050": {
+  "title": "Let's Verify Step by Step",
+  "first_author": "Hunter Lightman",
+  "n_authors": 10,
+  "year": "2023"
+ },
+ "2305.14992": {
+  "title": "Reasoning with Language Model is Planning with World Model",
+  "first_author": "Shibo Hao",
+  "n_authors": 7,
+  "year": "2023"
+ },
+ "2306.02561": {
+  "title": "LLM-Blender: Ensembling Large Language Models with Pairwise Ranking and Generative Fusion",
+  "first_author": "Dongfu Jiang",
+  "n_authors": 3,
+  "year": "2023"
+ },
+ "2305.11860": {
+  "title": "Let's Sample Step by Step: Adaptive-Consistency for Efficient Reasoning and Coding with LLMs",
+  "first_author": "Pranjal Aggarwal",
+  "n_authors": 4,
+  "year": "2023"
+ },
+ "2305.10601": {
+  "title": "Tree of Thoughts: Deliberate Problem Solving with Large Language Models",
+  "first_author": "Shunyu Yao",
+  "n_authors": 7,
+  "year": "2023"
+ },
+ "2305.06983": {
+  "title": "Active Retrieval Augmented Generation",
+  "first_author": "Zhengbao Jiang",
+  "n_authors": 9,
+  "year": "2023"
+ },
+ "2305.18654": {
+  "title": "Faith and Fate: Limits of Transformers on Compositionality",
+  "first_author": "Nouha Dziri",
+  "n_authors": 16,
+  "year": "2023"
+ },
+ "2305.09781": {
+  "title": "SpecInfer: Accelerating Generative Large Language Model Serving with Tree-based Speculative Inference and Verification",
+  "first_author": "Xupeng Miao",
+  "n_authors": 15,
+  "year": "2023"
+ },
+ "2305.04388": {
+  "title": "Language Models Don't Always Say What They Think: Unfaithful Explanations in Chain-of-Thought Prompting",
+  "first_author": "Miles Turpin",
+  "n_authors": 4,
+  "year": "2023"
+ },
+ "2305.14283": {
+  "title": "Query Rewriting for Retrieval-Augmented Large Language Models",
+  "first_author": "Xinbei Ma",
+  "n_authors": 5,
+  "year": "2023"
+ },
+ "2305.14325": {
+  "title": "Improving Factuality and Reasoning in Language Models through Multiagent Debate",
+  "first_author": "Yilun Du",
+  "n_authors": 5,
+  "year": "2023"
+ },
+ "2305.11738": {
+  "title": "CRITIC: Large Language Models Can Self-Correct with Tool-Interactive Critiquing",
+  "first_author": "Zhibin Gou",
+  "n_authors": 7,
+  "year": "2023"
+ },
+ "2306.05685": {
+  "title": "Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena",
+  "first_author": "Lianmin Zheng",
+  "n_authors": 13,
+  "year": "2023"
+ },
+ "2305.14251": {
+  "title": "FActScore: Fine-grained Atomic Evaluation of Factual Precision in Long Form Text Generation",
+  "first_author": "Sewon Min",
+  "n_authors": 9,
+  "year": "2023"
+ },
+ "2306.09896": {
+  "title": "Is Self-Repair a Silver Bullet for Code Generation?",
+  "first_author": "Theo X. Olausson",
+  "n_authors": 5,
+  "year": "2023"
+ },
+ "2305.19118": {
+  "title": "Encouraging Divergent Thinking in Large Language Models through Multi-Agent Debate",
+  "first_author": "Tian Liang",
+  "n_authors": 9,
+  "year": "2023"
+ },
+ "2307.13528": {
+  "title": "FacTool: Factuality Detection in Generative AI -- A Tool Augmented Framework for Multi-Task and Multi-Domain Scenarios",
+  "first_author": "I-Chun Chern",
+  "n_authors": 9,
+  "year": "2023"
+ },
+ "2307.15337": {
+  "title": "Skeleton-of-Thought: Prompting LLMs for Efficient Parallel Generation",
+  "first_author": "Xuefei Ning",
+  "n_authors": 6,
+  "year": "2023"
+ },
+ "2308.03281": {
+  "title": "Towards General Text Embeddings with Multi-stage Contrastive Learning",
+  "first_author": "Zehan Li",
+  "n_authors": 6,
+  "year": "2023"
+ },
+ "2309.02427": {
+  "title": "Cognitive Architectures for Language Agents",
+  "first_author": "Theodore R. Sumers",
+  "n_authors": 4,
+  "year": "2023"
+ },
+ "2309.03409": {
+  "title": "Large Language Models as Optimizers",
+  "first_author": "Chengrun Yang",
+  "n_authors": 7,
+  "year": "2023"
+ },
+ "2307.03172": {
+  "title": "Lost in the Middle: How Language Models Use Long Contexts",
+  "first_author": "Nelson F. Liu",
+  "n_authors": 7,
+  "year": "2023"
+ },
+ "2310.01352": {
+  "title": "RA-DIT: Retrieval-Augmented Dual Instruction Tuning",
+  "first_author": "Xi Victoria Lin",
+  "n_authors": 12,
+  "year": "2023"
+ },
+ "2309.08532": {
+  "title": "EvoPrompt: Connecting LLMs with Evolutionary Algorithms Yields Powerful Prompt Optimizers",
+  "first_author": "Qingyan Guo",
+  "n_authors": 9,
+  "year": "2023"
+ },
+ "2308.09687": {
+  "title": "Graph of Thoughts: Solving Elaborate Problems with Large Language Models",
+  "first_author": "Maciej Besta",
+  "n_authors": 11,
+  "year": "2023"
+ },
+ "2309.07597": {
+  "title": "C-Pack: Packed Resources For General Chinese Embeddings",
+  "first_author": "Shitao Xiao",
+  "n_authors": 6,
+  "year": "2023"
+ },
+ "2308.03688": {
+  "title": "AgentBench: Evaluating LLMs as Agents",
+  "first_author": "Xiao Liu",
+  "n_authors": 22,
+  "year": "2023"
+ },
+ "2307.13702": {
+  "title": "Measuring Faithfulness in Chain-of-Thought Reasoning",
+  "first_author": "Tamera Lanham",
+  "n_authors": 30,
+  "year": "2023"
+ },
+ "2309.06180": {
+  "title": "Efficient Memory Management for Large Language Model Serving with PagedAttention",
+  "first_author": "Woosuk Kwon",
+  "n_authors": 9,
+  "year": "2023"
+ },
+ "2309.11495": {
+  "title": "Chain-of-Verification Reduces Hallucination in Large Language Models",
+  "first_author": "Shehzaad Dhuliawala",
+  "n_authors": 7,
+  "year": "2023"
+ },
+ "2307.02483": {
+  "title": "Jailbroken: How Does LLM Safety Training Fail?",
+  "first_author": "Alexander Wei",
+  "n_authors": 3,
+  "year": "2023"
+ },
+ "2308.00352": {
+  "title": "MetaGPT: Meta Programming for A Multi-Agent Collaborative Framework",
+  "first_author": "Sirui Hong",
+  "n_authors": 15,
+  "year": "2023"
+ },
+ "2308.11432": {
+  "title": "A Survey on Large Language Model based Autonomous Agents",
+  "first_author": "Lei Wang",
+  "n_authors": 13,
+  "year": "2023"
+ },
+ "2309.01431": {
+  "title": "Benchmarking Large Language Models in Retrieval-Augmented Generation",
+  "first_author": "Jiawei Chen",
+  "n_authors": 4,
+  "year": "2023"
+ },
+ "2309.03882": {
+  "title": "Large Language Models Are Not Robust Multiple Choice Selectors",
+  "first_author": "Chujie Zheng",
+  "n_authors": 5,
+  "year": "2023"
+ },
+ "2308.08155": {
+  "title": "AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation",
+  "first_author": "Qingyun Wu",
+  "n_authors": 14,
+  "year": "2023"
+ },
+ "2306.17563": {
+  "title": "Large Language Models are Effective Text Rankers with Pairwise Ranking Prompting",
+  "first_author": "Zhen Qin",
+  "n_authors": 12,
+  "year": "2023"
+ },
+ "2310.01558": {
+  "title": "Making Retrieval-Augmented Language Models Robust to Irrelevant Context",
+  "first_author": "Ori Yoran",
+  "n_authors": 4,
+  "year": "2023"
+ },
+ "2306.13063": {
+  "title": "Can LLMs Express Their Uncertainty? An Empirical Evaluation of Confidence Elicitation in LLMs",
+  "first_author": "Miao Xiong",
+  "n_authors": 7,
+  "year": "2023"
+ },
+ "2307.09702": {
+  "title": "Efficient Guided Generation for Large Language Models",
+  "first_author": "Brandon T. Willard",
+  "n_authors": 2,
+  "year": "2023"
+ },
+ "2309.15217": {
+  "title": "Ragas: Automated Evaluation of Retrieval Augmented Generation",
+  "first_author": "Shahul Es",
+  "n_authors": 4,
+  "year": "2023"
+ },
+ "2311.09476": {
+  "title": "ARES: An Automated Evaluation Framework for Retrieval-Augmented Generation Systems",
+  "first_author": "Jon Saad-Falcon",
+  "n_authors": 4,
+  "year": "2023"
+ },
+ "2311.09210": {
+  "title": "Chain-of-Note: Enhancing Robustness in Retrieval-Augmented Language Models",
+  "first_author": "Wenhao Yu",
+  "n_authors": 6,
+  "year": "2023"
+ },
+ "2310.07240": {
+  "title": "CacheGen: KV Cache Compression and Streaming for Fast Large Language Model Serving",
+  "first_author": "Yuhan Liu",
+  "n_authors": 14,
+  "year": "2023"
+ },
+ "2310.15123": {
+  "title": "Branch-Solve-Merge Improves Large Language Model Evaluation and Generation",
+  "first_author": "Swarnadeep Saha",
+  "n_authors": 6,
+  "year": "2023"
+ },
+ "2310.04406": {
+  "title": "Language Agent Tree Search Unifies Reasoning Acting and Planning in Language Models",
+  "first_author": "Andy Zhou",
+  "n_authors": 5,
+  "year": "2023"
+ },
+ "2310.12815": {
+  "title": "Formalizing and Benchmarking Prompt Injection Attacks and Defenses",
+  "first_author": "Yupei Liu",
+  "n_authors": 5,
+  "year": "2023"
+ },
+ "2311.05772": {
+  "title": "ADaPT: As-Needed Decomposition and Planning with Language Models",
+  "first_author": "Archiki Prasad",
+  "n_authors": 7,
+  "year": "2023"
+ },
+ "2310.04408": {
+  "title": "RECOMP: Improving Retrieval-Augmented LMs with Compression and Selective Augmentation",
+  "first_author": "Fangyuan Xu",
+  "n_authors": 3,
+  "year": "2023"
+ },
+ "2310.09497": {
+  "title": "A Setwise Approach for Effective and Highly Efficient Zero-shot Ranking with Large Language Models",
+  "first_author": "Shengyao Zhuang",
+  "n_authors": 4,
+  "year": "2023"
+ },
+ "2310.06839": {
+  "title": "LongLLMLingua: Accelerating and Enhancing LLMs in Long Context Scenarios via Prompt Compression",
+  "first_author": "Huiqiang Jiang",
+  "n_authors": 7,
+  "year": "2023"
+ },
+ "2310.11324": {
+  "title": "Quantifying Language Models' Sensitivity to Spurious Features in Prompt Design or: How I learned to start worrying about prompt formatting",
+  "first_author": "Melanie Sclar",
+  "n_authors": 4,
+  "year": "2023"
+ },
+ "2310.08491": {
+  "title": "Prometheus: Inducing Fine-grained Evaluation Capability in Language Models",
+  "first_author": "Seungone Kim",
+  "n_authors": 11,
+  "year": "2023"
+ },
+ "2310.08319": {
+  "title": "Fine-Tuning LLaMA for Multi-Stage Text Retrieval",
+  "first_author": "Xueguang Ma",
+  "n_authors": 5,
+  "year": "2023"
+ },
+ "2310.10501": {
+  "title": "NeMo Guardrails: A Toolkit for Controllable and Safe LLM Applications with Programmable Rails",
+  "first_author": "Traian Rebedea",
+  "n_authors": 5,
+  "year": "2023"
+ },
+ "2310.03714": {
+  "title": "DSPy: Compiling Declarative Language Model Calls into Self-Improving Pipelines",
+  "first_author": "Omar Khattab",
+  "n_authors": 13,
+  "year": "2023"
+ },
+ "2310.16427": {
+  "title": "PromptAgent: Strategic Planning with Language Models Enables Expert-level Prompt Optimization",
+  "first_author": "Xinyuan Wang",
+  "n_authors": 9,
+  "year": "2023"
+ },
+ "2310.03025": {
+  "title": "Retrieval meets Long Context Large Language Models",
+  "first_author": "Peng Xu",
+  "n_authors": 10,
+  "year": "2023"
+ },
+ "2310.11511": {
+  "title": "Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection",
+  "first_author": "Akari Asai",
+  "n_authors": 5,
+  "year": "2023"
+ },
+ "2310.06117": {
+  "title": "Take a Step Back: Evoking Reasoning via Abstraction in Large Language Models",
+  "first_author": "Huaixiu Steven Zheng",
+  "n_authors": 7,
+  "year": "2023"
+ },
+ "2310.01798": {
+  "title": "Large Language Models Cannot Self-Correct Reasoning Yet",
+  "first_author": "Jie Huang",
+  "n_authors": 7,
+  "year": "2023"
+ },
+ "2310.05736": {
+  "title": "LLMLingua: Compressing Prompts for Accelerated Inference of Large Language Models",
+  "first_author": "Huiqiang Jiang",
+  "n_authors": 5,
+  "year": "2023"
+ },
+ "2310.07641": {
+  "title": "Evaluating Large Language Models at Evaluating Instruction Following",
+  "first_author": "Zhiyuan Zeng",
+  "n_authors": 6,
+  "year": "2023"
+ },
+ "2310.12963": {
+  "title": "AutoMix: Automatically Mixing Language Models",
+  "first_author": "Pranjal Aggarwal",
+  "n_authors": 13,
+  "year": "2023"
+ },
+ "2311.08516": {
+  "title": "LLMs cannot find reasoning errors, but can correct them given the error location",
+  "first_author": "Gladys Tyen",
+  "n_authors": 5,
+  "year": "2023"
+ },
+ "2311.04934": {
+  "title": "Prompt Cache: Modular Attention Reuse for Low-Latency Inference",
+  "first_author": "In Gim",
+  "n_authors": 6,
+  "year": "2023"
+ },
+ "2401.12954": {
+  "title": "Meta-Prompting: Enhancing Language Models with Task-Agnostic Scaffolding",
+  "first_author": "Mirac Suzgun",
+  "n_authors": 2,
+  "year": "2024"
+ },
+ "2311.16452": {
+  "title": "Can Generalist Foundation Models Outcompete Special-Purpose Tuning? Case Study in Medicine",
+  "first_author": "Harsha Nori",
+  "n_authors": 18,
+  "year": "2023"
+ },
+ "2312.02724": {
+  "title": "RankZephyr: Effective and Robust Zero-Shot Listwise Reranking is a Breeze!",
+  "first_author": "Ronak Pradeep",
+  "n_authors": 3,
+  "year": "2023"
+ },
+ "2312.06674": {
+  "title": "Llama Guard: LLM-based Input-Output Safeguard for Human-AI Conversations",
+  "first_author": "Hakan Inan",
+  "n_authors": 11,
+  "year": "2023"
+ },
+ "2311.18760": {
+  "title": "TaskBench: Benchmarking Large Language Models for Task Automation",
+  "first_author": "Yongliang Shen",
+  "n_authors": 9,
+  "year": "2023"
+ },
+ "2401.14887": {
+  "title": "The Power of Noise: Redefining Retrieval for RAG Systems",
+  "first_author": "Florin Cuconasu",
+  "n_authors": 8,
+  "year": "2024"
+ },
+ "2312.07104": {
+  "title": "SGLang: Efficient Execution of Structured Language Model Programs",
+  "first_author": "Lianmin Zheng",
+  "n_authors": 12,
+  "year": "2023"
+ },
+ "2311.10054": {
+  "title": "When \"A Helpful Assistant\" Is Not Really Helpful: Personas in System Prompts Do Not Improve Performances of Large Language Models",
+  "first_author": "Mingqian Zheng",
+  "n_authors": 5,
+  "year": "2023"
+ },
+ "2312.04429": {
+  "title": "Approximate Caching for Efficiently Serving Diffusion Models",
+  "first_author": "Shubham Agarwal",
+  "n_authors": 6,
+  "year": "2023"
+ },
+ "2312.10997": {
+  "title": "Retrieval-Augmented Generation for Large Language Models: A Survey",
+  "first_author": "Yunfan Gao",
+  "n_authors": 10,
+  "year": "2023"
+ },
+ "2401.05856": {
+  "title": "Seven Failure Points When Engineering a Retrieval Augmented Generation System",
+  "first_author": "Scott Barnett",
+  "n_authors": 5,
+  "year": "2024"
+ },
+ "2401.10774": {
+  "title": "Medusa: Simple LLM Inference Acceleration Framework with Multiple Decoding Heads",
+  "first_author": "Tianle Cai",
+  "n_authors": 7,
+  "year": "2024"
+ },
+ "2312.16171": {
+  "title": "Principled Instructions Are All You Need for Questioning LLaMA-1/2, GPT-3.5/4",
+  "first_author": "Sondos Mahmoud Bsharat",
+  "n_authors": 3,
+  "year": "2023"
+ },
+ "2402.01173": {
+  "title": "Efficient Prompt Caching via Embedding Similarity",
+  "first_author": "Hanlin Zhu",
+  "n_authors": 3,
+  "year": "2024"
+ },
+ "2401.15884": {
+  "title": "Corrective Retrieval Augmented Generation",
+  "first_author": "Shi-Qi Yan",
+  "n_authors": 4,
+  "year": "2024"
+ },
+ "2401.09670": {
+  "title": "DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving",
+  "first_author": "Yinmin Zhong",
+  "n_authors": 8,
+  "year": "2024"
+ },
+ "2312.03863": {
+  "title": "Efficient Large Language Models: A Survey",
+  "first_author": "Zhongwei Wan",
+  "n_authors": 12,
+  "year": "2023"
+ },
+ "2311.17311": {
+  "title": "Universal Self-Consistency for Large Language Model Generation",
+  "first_author": "Xinyun Chen",
+  "n_authors": 10,
+  "year": "2023"
+ },
+ "2312.08935": {
+  "title": "Math-Shepherd: Verify and Reinforce LLMs Step-by-step without Human Annotations",
+  "first_author": "Peiyi Wang",
+  "n_authors": 9,
+  "year": "2023"
+ },
+ "2311.11829": {
+  "title": "System 2 Attention (is something you might need too)",
+  "first_author": "Jason Weston",
+  "n_authors": 2,
+  "year": "2023"
+ },
+ "2401.00368": {
+  "title": "Improving Text Embeddings with Large Language Models",
+  "first_author": "Liang Wang",
+  "n_authors": 6,
+  "year": "2023"
+ },
+ "2401.18059": {
+  "title": "RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval",
+  "first_author": "Parth Sarthi",
+  "n_authors": 6,
+  "year": "2024"
+ },
+ "2401.15077": {
+  "title": "EAGLE: Speculative Sampling Requires Rethinking Feature Uncertainty",
+  "first_author": "Yuhui Li",
+  "n_authors": 4,
+  "year": "2024"
+ },
+ "2312.04511": {
+  "title": "An LLM Compiler for Parallel Function Calling",
+  "first_author": "Sehoon Kim",
+  "n_authors": 7,
+  "year": "2023"
+ },
+ "2312.06648": {
+  "title": "Dense X Retrieval: What Retrieval Granularity Should We Use?",
+  "first_author": "Tong Chen",
+  "n_authors": 8,
+  "year": "2023"
+ },
+ "2407.01219": {
+  "title": "Searching for Best Practices in Retrieval-Augmented Generation",
+  "first_author": "Xiaohua Wang",
+  "n_authors": 14,
+  "year": "2024"
+ },
+ "2407.01502": {
+  "title": "AI Agents That Matter",
+  "first_author": "Sayash Kapoor",
+  "n_authors": 5,
+  "year": "2024"
+ },
+ "2407.21059": {
+  "title": "Modular RAG: Transforming RAG Systems into LEGO-like Reconfigurable Frameworks",
+  "first_author": "Yunfan Gao",
+  "n_authors": 4,
+  "year": "2024"
+ },
+ "2407.00215": {
+  "title": "LLM Critics Help Catch LLM Bugs",
+  "first_author": "Nat McAleese",
+  "n_authors": 6,
+  "year": "2024"
+ },
+ "2409.04701": {
+  "title": "Late Chunking: Contextual Chunk Embeddings Using Long-Context Embedding Models",
+  "first_author": "Michael Günther",
+  "n_authors": 5,
+  "year": "2024"
+ },
+ "2407.21787": {
+  "title": "Large Language Monkeys: Scaling Inference Compute with Repeated Sampling",
+  "first_author": "Bradley Brown",
+  "n_authors": 7,
+  "year": "2024"
+ },
+ "2410.15332": {
+  "title": "EPIC: Efficient Position-Independent Caching for Serving Large Language Models",
+  "first_author": "Junhao Hu",
+  "n_authors": 10,
+  "year": "2024"
+ },
+ "2407.16833": {
+  "title": "Retrieval Augmented Generation or Long-Context LLMs? A Comprehensive Study and Hybrid Approach",
+  "first_author": "Zhuowan Li",
+  "n_authors": 5,
+  "year": "2024"
+ },
+ "2407.01489": {
+  "title": "Agentless: Demystifying LLM-based Software Engineering Agents",
+  "first_author": "Chunqiu Steven Xia",
+  "n_authors": 4,
+  "year": "2024"
+ },
+ "2407.08223": {
+  "title": "Speculative RAG: Enhancing Retrieval Augmented Generation through Drafting",
+  "first_author": "Zilong Wang",
+  "n_authors": 12,
+  "year": "2024"
+ },
+ "2407.02883": {
+  "title": "CoIR: A Comprehensive Benchmark for Code Information Retrieval Models",
+  "first_author": "Xiangyang Li",
+  "n_authors": 8,
+  "year": "2024"
+ },
+ "2407.12883": {
+  "title": "BRIGHT: A Realistic and Challenging Benchmark for Reasoning-Intensive Retrieval",
+  "first_author": "Hongjin Su",
+  "n_authors": 15,
+  "year": "2024"
+ },
+ "2407.13692": {
+  "title": "Prover-Verifier Games improve legibility of LLM outputs",
+  "first_author": "Jan Hendrik Kirchner",
+  "n_authors": 6,
+  "year": "2024"
+ },
+ "2409.12917": {
+  "title": "Training Language Models to Self-Correct via Reinforcement Learning",
+  "first_author": "Aviral Kumar",
+  "n_authors": 18,
+  "year": "2024"
+ },
+ "2410.08146": {
+  "title": "Rewarding Progress: Scaling Automated Process Verifiers for LLM Reasoning",
+  "first_author": "Amrith Setlur",
+  "n_authors": 9,
+  "year": "2024"
+ },
+ "2410.07176": {
+  "title": "Astute RAG: Overcoming Imperfect Retrieval Augmentation and Knowledge Conflicts for Large Language Models",
+  "first_author": "Fei Wang",
+  "n_authors": 5,
+  "year": "2024"
+ },
+ "2410.09342": {
+  "title": "LLM$\\times$MapReduce: Simplified Long-Sequence Processing using Large Language Models",
+  "first_author": "Zihan Zhou",
+  "n_authors": 14,
+  "year": "2024"
+ },
+ "2409.01666": {
+  "title": "In Defense of RAG in the Era of Long-Context Language Models",
+  "first_author": "Tan Yu",
+  "n_authors": 3,
+  "year": "2024"
+ },
+ "2408.08067": {
+  "title": "RAGChecker: A Fine-grained Framework for Diagnosing Retrieval-Augmented Generation",
+  "first_author": "Dongyu Ru",
+  "n_authors": 18,
+  "year": "2024"
+ },
+ "2408.15240": {
+  "title": "Generative Verifiers: Reward Modeling as Next-Token Prediction",
+  "first_author": "Lunjun Zhang",
+  "n_authors": 6,
+  "year": "2024"
+ },
+ "2408.02666": {
+  "title": "Self-Taught Evaluators",
+  "first_author": "Tianlu Wang",
+  "n_authors": 10,
+  "year": "2024"
+ },
+ "2408.03314": {
+  "title": "Scaling LLM Test-Time Compute Optimally can be More Effective than Scaling Model Parameters",
+  "first_author": "Charlie Snell",
+  "n_authors": 4,
+  "year": "2024"
+ },
+ "2409.15254": {
+  "title": "Archon: An Architecture Search Framework for Inference-Time Techniques",
+  "first_author": "Jon Saad-Falcon",
+  "n_authors": 11,
+  "year": "2024"
+ },
+ "2408.02442": {
+  "title": "Let Me Speak Freely? A Study on the Impact of Format Restrictions on Performance of Large Language Models",
+  "first_author": "Zhi Rui Tam",
+  "n_authors": 6,
+  "year": "2024"
+ },
+ "2410.13070": {
+  "title": "Is Semantic Chunking Worth the Computational Cost?",
+  "first_author": "Renyi Qu",
+  "n_authors": 3,
+  "year": "2024"
+ },
+ "2411.05276": {
+  "title": "GPT Semantic Cache: Reducing LLM Costs and Latency via Semantic Embedding Caching",
+  "first_author": "Sajal Regmi",
+  "n_authors": 2,
+  "year": "2024"
+ },
+ "2501.18837": {
+  "title": "Constitutional Classifiers: Defending against Universal Jailbreaks across Thousands of Hours of Red Teaming",
+  "first_author": "Mrinank Sharma",
+  "n_authors": 43,
+  "year": "2025"
+ },
+ "2510.09665": {
+  "title": "LMCache: An Efficient KV Cache Layer for Enterprise-Scale LLM Inference",
+  "first_author": "Yuhan Liu",
+  "n_authors": 11,
+  "year": "2025"
+ },
+ "2505.05410": {
+  "title": "Reasoning Models Don't Always Say What They Think",
+  "first_author": "Yanda Chen",
+  "n_authors": 15,
+  "year": "2025"
+ },
+ "2502.18418": {
+  "title": "Rank1: Test-Time Compute for Reranking in Information Retrieval",
+  "first_author": "Orion Weller",
+  "n_authors": 6,
+  "year": "2025"
+ },
+ "2507.07061": {
+  "title": "An Ensemble Embedding Approach for Improving Semantic Caching Performance in LLM-based Systems",
+  "first_author": "Shervin Ghaffari",
+  "n_authors": 3,
+  "year": "2025"
+ },
+ "2501.07301": {
+  "title": "The Lessons of Developing Process Reward Models in Mathematical Reasoning",
+  "first_author": "Zhenru Zhang",
+  "n_authors": 9,
+  "year": "2025"
+ },
+ "2412.07017": {
+  "title": "Asynchronous LLM Function Calling",
+  "first_author": "In Gim",
+  "n_authors": 3,
+  "year": "2024"
+ },
+ "2503.13657": {
+  "title": "Why Do Multi-Agent LLM Systems Fail?",
+  "first_author": "Mert Cemri",
+  "n_authors": 13,
+  "year": "2025"
+ },
+ "2506.05176": {
+  "title": "Qwen3 Embedding: Advancing Text Embedding and Reranking Through Foundation Models",
+  "first_author": "Yanzhao Zhang",
+  "n_authors": 12,
+  "year": "2025"
+ },
+ "2506.08837": {
+  "title": "Design Patterns for Securing LLM Agents against Prompt Injections",
+  "first_author": "Luca Beurer-Kellner",
+  "n_authors": 14,
+  "year": "2025"
+ },
+ "2411.15594": {
+  "title": "A Survey on LLM-as-a-Judge",
+  "first_author": "Jiawei Gu",
+  "n_authors": 16,
+  "year": "2024"
+ },
+ "2502.13595": {
+  "title": "MMTEB: Massive Multilingual Text Embedding Benchmark",
+  "first_author": "Kenneth Enevoldsen",
+  "n_authors": 86,
+  "year": "2025"
+ },
+ "2508.07675": {
+  "title": "Semantic Caching for Low-Cost LLM Serving: From Offline Learning to Online Adaptation",
+  "first_author": "Xutong Liu",
+  "n_authors": 8,
+  "year": "2025"
+ },
+ "2412.06559": {
+  "title": "ProcessBench: Identifying Process Errors in Mathematical Reasoning",
+  "first_author": "Chujie Zheng",
+  "n_authors": 9,
+  "year": "2024"
+ },
+ "2504.15466": {
+  "title": "Learning Adaptive Parallel Reasoning with Language Models",
+  "first_author": "Jiayi Pan",
+  "n_authors": 9,
+  "year": "2025"
+ },
+ "2411.17501": {
+  "title": "The Limits of Inference Scaling Through Resampling",
+  "first_author": "Benedikt Stroebl",
+  "n_authors": 3,
+  "year": "2024"
+ },
+ "2501.12948": {
+  "title": "DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning",
+  "first_author": " DeepSeek-AI",
+  "n_authors": 200,
+  "year": "2025"
+ },
+ "2507.19457": {
+  "title": "GEPA: Reflective Prompt Evolution Can Outperform Reinforcement Learning",
+  "first_author": "Lakshya A Agrawal",
+  "n_authors": 17,
+  "year": "2025"
+ },
+ "2502.18600": {
+  "title": "Chain of Draft: Thinking Faster by Writing Less",
+  "first_author": "Silei Xu",
+  "n_authors": 4,
+  "year": "2025"
+ },
+ "2503.18813": {
+  "title": "Defeating Prompt Injections by Design",
+  "first_author": "Edoardo Debenedetti",
+  "n_authors": 10,
+  "year": "2025"
+ },
+ "2502.03771": {
+  "title": "vCache: Verified Semantic Prompt Caching",
+  "first_author": "Luis Gaspar Schroeder",
+  "n_authors": 10,
+  "year": "2025"
+ },
+ "2501.09136": {
+  "title": "Agentic Retrieval-Augmented Generation: A Survey on Agentic RAG",
+  "first_author": "Aditi Singh",
+  "n_authors": 5,
+  "year": "2025"
+ },
+ "2502.00674": {
+  "title": "Rethinking Mixture-of-Agents: Is Mixing Different Large Language Models Beneficial?",
+  "first_author": "Wenzhe Li",
+  "n_authors": 4,
+  "year": "2025"
+ },
+ "2504.06261": {
+  "title": "Hogwild! Inference: Parallel LLM Generation via Concurrent Attention",
+  "first_author": "Gleb Rodionov",
+  "n_authors": 9,
+  "year": "2025"
+ },
+ "1901.04085": {
+  "title": "Passage Re-ranking with BERT",
+  "first_author": "Rodrigo Nogueira",
+  "n_authors": 2,
+  "year": "2019"
+ },
+ "1706.04599": {
+  "title": "On Calibration of Modern Neural Networks",
+  "first_author": "Chuan Guo",
+  "n_authors": 4,
+  "year": "2017"
+ },
+ "1512.00727": {
+  "title": "TinyLFU: A Highly Efficient Cache Admission Policy",
+  "first_author": "Gil Einziger",
+  "n_authors": 3,
+  "year": "2015"
+ },
+ "1909.09436": {
+  "title": "CodeSearchNet Challenge: Evaluating the State of Semantic Code Search",
+  "first_author": "Hamel Husain",
+  "n_authors": 5,
+  "year": "2019"
+ },
+ "1803.05355": {
+  "title": "FEVER: a large-scale dataset for Fact Extraction and VERification",
+  "first_author": "James Thorne",
+  "n_authors": 4,
+  "year": "2018"
+ },
+ "1908.10084": {
+  "title": "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks",
+  "first_author": "Nils Reimers",
+  "n_authors": 2,
+  "year": "2019"
+ },
+ "1904.08375": {
+  "title": "Document Expansion by Query Prediction",
+  "first_author": "Rodrigo Nogueira",
+  "n_authors": 4,
+  "year": "2019"
+ },
+ "1811.03115": {
+  "title": "Blockwise Parallel Decoding for Deep Autoregressive Models",
+  "first_author": "Mitchell Stern",
+  "n_authors": 3,
+  "year": "2018"
+ },
+ "1603.09320": {
+  "title": "Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs",
+  "first_author": "Yu. A. Malkov",
+  "n_authors": 2,
+  "year": "2016"
+ },
+ "1611.09268": {
+  "title": "MS MARCO: A Human Generated MAchine Reading COmprehension Dataset",
+  "first_author": "Payal Bajaj",
+  "n_authors": 15,
+  "year": "2016"
+ },
+ "2003.06713": {
+  "title": "Document Ranking with a Pretrained Sequence-to-Sequence Model",
+  "first_author": "Rodrigo Nogueira",
+  "n_authors": 3,
+  "year": "2020"
+ },
+ "2005.14165": {
+  "title": "Language Models are Few-Shot Learners",
+  "first_author": "Tom B. Brown",
+  "n_authors": 31,
+  "year": "2020"
+ },
+ "2007.00808": {
+  "title": "Approximate Nearest Neighbor Negative Contrastive Learning for Dense Text Retrieval",
+  "first_author": "Lee Xiong",
+  "n_authors": 8,
+  "year": "2020"
+ },
+ "2004.12832": {
+  "title": "ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT",
+  "first_author": "Omar Khattab",
+  "n_authors": 2,
+  "year": "2020"
+ },
+ "2004.04906": {
+  "title": "Dense Passage Retrieval for Open-Domain Question Answering",
+  "first_author": "Vladimir Karpukhin",
+  "n_authors": 8,
+  "year": "2020"
+ },
+ "1910.14424": {
+  "title": "Multi-Stage Document Ranking with BERT",
+  "first_author": "Rodrigo Nogueira",
+  "n_authors": 4,
+  "year": "2019"
+ },
+ "2002.08909": {
+  "title": "REALM: Retrieval-Augmented Language Model Pre-Training",
+  "first_author": "Kelvin Guu",
+  "n_authors": 5,
+  "year": "2020"
+ },
+ "2005.00181": {
+  "title": "Sparse, Dense, and Attentional Representations for Text Retrieval",
+  "first_author": "Yi Luan",
+  "n_authors": 4,
+  "year": "2020"
+ },
+ "2005.11401": {
+  "title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+  "first_author": "Patrick Lewis",
+  "n_authors": 12,
+  "year": "2020"
+ },
+ "2003.07820": {
+  "title": "Overview of the TREC 2019 deep learning track",
+  "first_author": "Nick Craswell",
+  "n_authors": 5,
+  "year": "2020"
+ },
+ "2104.05740": {
+  "title": "A Replication Study of Dense Passage Retriever",
+  "first_author": "Xueguang Ma",
+  "n_authors": 4,
+  "year": "2021"
+ },
+ "2102.09690": {
+  "title": "Calibrate Before Use: Improving Few-Shot Performance of Language Models",
+  "first_author": "Tony Z. Zhao",
+  "n_authors": 5,
+  "year": "2021"
+ },
+ "2104.08663": {
+  "title": "BEIR: A Heterogenous Benchmark for Zero-shot Evaluation of Information Retrieval Models",
+  "first_author": "Nandan Thakur",
+  "n_authors": 5,
+  "year": "2021"
+ },
+ "2010.06467": {
+  "title": "Pretrained Transformers for Text Ranking: BERT and Beyond",
+  "first_author": "Jimmy Lin",
+  "n_authors": 3,
+  "year": "2020"
+ },
+ "2102.10073": {
+  "title": "Pyserini: An Easy-to-Use Python Toolkit to Support Replicable IR Research with Sparse and Dense Representations",
+  "first_author": "Jimmy Lin",
+  "n_authors": 6,
+  "year": "2021"
+ },
+ "2007.01282": {
+  "title": "Leveraging Passage Retrieval with Generative Models for Open Domain Question Answering",
+  "first_author": "Gautier Izacard",
+  "n_authors": 2,
+  "year": "2020"
+ },
+ "2105.11447": {
+  "title": "True Few-Shot Learning with Language Models",
+  "first_author": "Ethan Perez",
+  "n_authors": 3,
+  "year": "2021"
+ },
+ "2104.08786": {
+  "title": "Fantastically Ordered Prompts and Where to Find Them: Overcoming Few-Shot Prompt Order Sensitivity",
+  "first_author": "Yao Lu",
+  "n_authors": 5,
+  "year": "2021"
+ },
+ "2101.06804": {
+  "title": "What Makes Good In-Context Examples for GPT-$3$?",
+  "first_author": "Jiachang Liu",
+  "n_authors": 6,
+  "year": "2021"
+ },
+ "2012.01988": {
+  "title": "Wisdom of Committees: An Overlooked Approach To Faster and More Accurate Models",
+  "first_author": "Xiaofang Wang",
+  "n_authors": 6,
+  "year": "2020"
+ },
+ "2111.09525": {
+  "title": "SummaC: Re-Visiting NLI-based Models for Inconsistency Detection in Summarization",
+  "first_author": "Philippe Laban",
+  "n_authors": 4,
+  "year": "2021"
+ },
+ "2106.14807": {
+  "title": "A Few Brief Notes on DeepImpact, COIL, and a Conceptual Framework for Information Retrieval Techniques",
+  "first_author": "Jimmy Lin",
+  "n_authors": 2,
+  "year": "2021"
+ },
+ "2107.05720": {
+  "title": "SPLADE: Sparse Lexical and Expansion Model for First Stage Ranking",
+  "first_author": "Thibault Formal",
+  "n_authors": 3,
+  "year": "2021"
+ },
+ "2107.03374": {
+  "title": "Evaluating Large Language Models Trained on Code",
+  "first_author": "Mark Chen",
+  "n_authors": 58,
+  "year": "2021"
+ },
+ "2110.14168": {
+  "title": "Training Verifiers to Solve Math Word Problems",
+  "first_author": "Karl Cobbe",
+  "n_authors": 12,
+  "year": "2021"
+ },
+ "2112.07577": {
+  "title": "GPL: Generative Pseudo Labeling for Unsupervised Domain Adaptation of Dense Retrieval",
+  "first_author": "Kexin Wang",
+  "n_authors": 4,
+  "year": "2021"
+ },
+ "2112.09118": {
+  "title": "Unsupervised Dense Information Retrieval with Contrastive Learning",
+  "first_author": "Gautier Izacard",
+  "n_authors": 7,
+  "year": "2021"
+ },
+ "2112.08633": {
+  "title": "Learning To Retrieve Prompts for In-Context Learning",
+  "first_author": "Ohad Rubin",
+  "n_authors": 3,
+  "year": "2021"
+ },
+ "2112.04426": {
+  "title": "Improving language models by retrieving from trillions of tokens",
+  "first_author": "Sebastian Borgeaud",
+  "n_authors": 28,
+  "year": "2021"
+ },
+ "2112.01488": {
+  "title": "ColBERTv2: Effective and Efficient Retrieval via Lightweight Late Interaction",
+  "first_author": "Keshav Santhanam",
+  "n_authors": 5,
+  "year": "2021"
+ },
+ "2201.11903": {
+  "title": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models",
+  "first_author": "Jason Wei",
+  "n_authors": 9,
+  "year": "2022"
+ },
+ "2203.11171": {
+  "title": "Self-Consistency Improves Chain of Thought Reasoning in Language Models",
+  "first_author": "Xuezhi Wang",
+  "n_authors": 8,
+  "year": "2022"
+ },
+ "2203.07814": {
+  "title": "Competition-Level Code Generation with AlphaCode",
+  "first_author": "Yujia Li",
+  "n_authors": 26,
+  "year": "2022"
+ },
+ "2201.10582": {
+  "title": "Out-of-Domain Semantics to the Rescue! Zero-Shot Hybrid Retrieval Models",
+  "first_author": "Tao Chen",
+  "n_authors": 5,
+  "year": "2022"
+ },
+ "2201.07207": {
+  "title": "Language Models as Zero-Shot Planners: Extracting Actionable Knowledge for Embodied Agents",
+  "first_author": "Wenlong Huang",
+  "n_authors": 4,
+  "year": "2022"
+ },
+ "2112.12870": {
+  "title": "Measuring Attribution in Natural Language Generation Models",
+  "first_author": "Hannah Rashkin",
+  "n_authors": 10,
+  "year": "2021"
+ },
+ "2204.01691": {
+  "title": "Do As I Can, Not As I Say: Grounding Language in Robotic Affordances",
+  "first_author": "Michael Ahn",
+  "n_authors": 45,
+  "year": "2022"
+ },
+ "2204.04991": {
+  "title": "TRUE: Re-evaluating Factual Consistency Evaluation",
+  "first_author": "Or Honovich",
+  "n_authors": 10,
+  "year": "2022"
+ },
+ "2202.12837": {
+  "title": "Rethinking the Role of Demonstrations: What Makes In-Context Learning Work?",
+  "first_author": "Sewon Min",
+  "n_authors": 7,
+  "year": "2022"
+ },
+ "2205.04733": {
+  "title": "From Distillation to Hard Negative Sampling: Making Sparse Neural IR Models More Effective",
+  "first_author": "Thibault Formal",
+  "n_authors": 4,
+  "year": "2022"
+ }
+}

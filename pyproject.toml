@@ -1,0 +1,66 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prebuilt-ai-technique-models"
+version = "1.0.0"
+description = "Six composable, research-grounded AI pipeline models (hybrid retrieval, task decomposition, answer verification, parallelization, caching, pipeline RAG) on a shared core."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+dependencies = [
+    "pydantic>=2.5",
+    "anthropic>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23"]
+retrieval = ["numpy>=1.24", "rank-bm25>=0.2.2"]
+embeddings = ["voyageai>=0.2", "sentence-transformers>=2.2"]
+redis = ["redis>=5"]
+
+[tool.setuptools.packages.find]
+where = [
+    "common",
+    "hybrid_retrieval_model",
+    "task_decomposition_model",
+    "answer_verification_model",
+    "parallelization_model",
+    "caching_model",
+    "pipeline_rag_model",
+]
+include = [
+    "pipeline_core*",
+    "hybrid_retrieval*",
+    "task_decomposition*",
+    "answer_verification*",
+    "parallelization*",
+    "caching*",
+    "pipeline_rag*",
+]
+exclude = ["tests*", "examples*"]
+
+[tool.pytest.ini_options]
+testpaths = [
+    "common/tests",
+    "hybrid_retrieval_model/tests",
+    "task_decomposition_model/tests",
+    "answer_verification_model/tests",
+    "parallelization_model/tests",
+    "caching_model/tests",
+    "pipeline_rag_model/tests",
+    "examples/tests",
+]
+asyncio_mode = "auto"
+# importlib mode lets every model folder keep its own tests/test_smoke.py etc. without basename collisions
+addopts = "-q --import-mode=importlib"
+pythonpath = [
+    "common",
+    "hybrid_retrieval_model",
+    "task_decomposition_model",
+    "answer_verification_model",
+    "parallelization_model",
+    "caching_model",
+    "pipeline_rag_model",
+]

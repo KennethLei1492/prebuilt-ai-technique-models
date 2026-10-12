@@ -1,0 +1,469 @@
+{
+ "concept": "Task Decomposition (planning, sub-goal generation, DAG construction, recursive refinement)",
+ "summary": "Task decomposition is the family of techniques by which an LLM-based system turns a natural-language task into an explicit structure of smaller sub-problems (a sequence, a tree, or a dependency DAG), solves them with the appropriate executor (an LLM prompt, a tool, a retriever, a symbolic function, or a sub-agent), and composes the partial results into a final answer. The field grew out of chain-of-thought prompting (Wei et al., NeurIPS 2022: PaLM-540B GSM8K 17.9% -> 56.9%) and matured along three axes. (1) Prompting-based decomposition: Least-to-Most (SCAN length split 16.2% -> 99.7%; GSM8K 5+-step problems 39.1% -> 45.2%), Decomposed Prompting (modular sub-task handler library with recursive and symbolic handlers; MultiArith 78 -> 95, GSM8K 36 -> 50.6 with a decomposed answer-extraction step), Successive Prompting (+~5 F1 on few-shot DROP), Self-Ask (compositionality gap ~40% independent of scale; Bamboogle 46.4 -> 57.6 -> 60.0 with search), and Plan-and-Solve (zero-shot PS+ 76.7 avg vs 70.4 Zero-shot-CoT, missing-step errors 12% -> 7%). (2) Search-based reasoning that treats decomposition as exploration: Tree of Thoughts (Game of 24 4% -> 74% with BFS b=5), Graph of Thoughts (arbitrary graph with Aggregate/Refine; sorting 128 elements ~62% lower error and >31% lower cost than ToT), and RAP (LLM as world model inside MCTS; Blocksworld 4-step 0.02 -> 0.88 with LLaMA-33B). (3) Agentic planner-executor systems: ReAct interleaves thought/action/observation (ALFWorld 71% best-of-6, WebShop 40% success); ReWOO decouples a blueprint of #E placeholders from tool execution (HotpotQA tokens 9795 -> 1986, ~5x); LLMCompiler emits a DAG with $N placeholders and schedules independent calls in parallel (up to 3.7x latency, 6.7x cost reduction vs ReAct, ~9% accuracy gain); HuggingGPT encodes tasks as JSON with id/dep/args fields; ADaPT decomposes recursively only on executor failure (ALFWorld 43.3 -> 71.6, WebShop 32 -> 44, TextCraft 19 -> 52 vs ReAct, d_max=3-4); TDAG re-decomposes after each sub-result and generates sub-agents (cascading failures 34.8% for Plan-and-Execute vs 4.35%).\n\nThe literature also establishes the hard limits that a production component must design around. Reflexion (HumanEval 80.1 -> 91.0 pass@1; AlfWorld +22% absolute over 12 trials) and Self-Refine (~20% absolute average gain) show that verbal reflection and replanning help, but Huang et al. (ICLR 2024) show these gains vanish without external feedback (GPT-4 GSM8K 95.5 -> 91.5 -> 89.0 under intrinsic self-correction; GPT-3.5 CommonSenseQA 75.8 -> 38.1). Valmeekam et al. (NeurIPS 2023 spotlight) show GPT-4 produces valid Blocksworld plans only ~34% of the time autonomously (~12% averaged across domains), but 82% of failed instances are fixed by a sound verifier (VAL) within ~3.7 backprompt rounds, and Faith and Fate shows that compositional accuracy decays with computation-graph depth because models do linearized subgraph matching. AgentBench finds that the dominant agent failure is Task Limit Exceeded (looping), followed by Invalid Format and Invalid Action. The state of practice (Anthropic's \"Building effective agents\", LangChain's planning-agents write-up, Anthropic prompting docs) converges on: use the simplest structure that works (prompt chaining -> routing -> parallel sectioning/voting -> orchestrator-workers -> evaluator-optimizer -> autonomous agent), make planning steps visible and loggable, encode dependencies explicitly so independent work runs in parallel, cap iterations, and verify with external signals rather than self-judgment.",
+ "papers": [
+  {
+   "title": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models",
+   "authors": "Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Brian Ichter, Fei Xia, Ed Chi, Quoc Le, Denny Zhou",
+   "year": 2022,
+   "venue": "NeurIPS 2022 (Main Conference Track); arXiv 2201.11903",
+   "url": "https://arxiv.org/abs/2201.11903",
+   "arxiv_id": "2201.11903",
+   "citation_signal": "Roughly 6,000 citations per a third-party aggregator seen in search results; Paper Digest ranks it the No. 2 most influential NeurIPS 2022 paper. Foundational classic the whole decomposition literature builds on.",
+   "key_contribution": "Prompting with exemplars containing intermediate natural-language reasoning steps raises PaLM-540B GSM8K accuracy from 17.9% (standard) to 56.9% (58.6% with an external calculator), surpassing finetuned GPT-3 with a verifier (55%); SVAMP 69.4 -> 79.0, MAWPS 79.2 -> 93.3, AQuA 25.2 -> 35.8. Ablations on LaMDA-137B (standard 6.5%, CoT 14.3%, equation-only 5.4%, variable-compute 6.4%, reasoning-after-answer 6.1%) show the natural-language intermediate steps themselves carry the gain. CoT is emergent: it does not help below ~100B parameters and smaller models produce fluent but illogical chains.",
+   "design_implication": "Every decomposition component should request explicit intermediate reasoning before committing to sub-goals or answers, and should allocate output room for it. Because CoT quality is model-size dependent, the planner role should be assigned to the strongest available model while executors can be smaller. Reasoning must precede the answer in the output format; verifying the answer-first variant is useless."
+  },
+  {
+   "title": "Self-Consistency Improves Chain of Thought Reasoning in Language Models",
+   "authors": "Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, Denny Zhou",
+   "year": 2022,
+   "venue": "ICLR 2023; arXiv 2203.11171",
+   "url": "https://arxiv.org/abs/2203.11171",
+   "arxiv_id": "2203.11171",
+   "citation_signal": "ICLR 2023 top-venue paper; the standard multi-plan selection baseline used by ToT, RAP, ReAct and Huang et al. Widely adopted in production as majority voting.",
+   "key_contribution": "Replace greedy decoding with sampling 40 diverse reasoning paths (T=0.7, top-k=40 for PaLM-540B; T=0.5, top-k=40 for LaMDA/UL2) and majority-vote the final answer. PaLM-540B GSM8K 56.5% -> 74.4% (+17.9), SVAMP +11.0, AQuA +12.2, StrategyQA +6.4, ARC-challenge +3.9. Accuracy rises monotonically with path count and saturates quickly (UL2-20B AQuA: 5 paths 24.9, 10 -> 25.3, 20 -> 26.7, 40 -> 26.9).",
+   "design_implication": "Use sampled-plan voting as the cheapest form of plan selection: generate k candidate decompositions or sub-answers at T~0.7 and pick the modal one. Since gains saturate, default k=5-10 for latency-sensitive paths and k=20-40 only for high-stakes final answers. Huang et al. later show plain self-consistency beats multi-agent debate at equal sample counts, so prefer it over more elaborate critique loops when no external signal is available."
+  },
+  {
+   "title": "Least-to-Most Prompting Enables Complex Reasoning in Large Language Models",
+   "authors": "Denny Zhou, Nathanael Schärli, Le Hou, Jason Wei, Nathan Scales, Xuezhi Wang, Dale Schuurmans, Claire Cui, Olivier Bousquet, Quoc Le, Ed Chi",
+   "year": 2022,
+   "venue": "ICLR 2023; arXiv 2205.10625",
+   "url": "https://arxiv.org/abs/2205.10625",
+   "arxiv_id": "2205.10625",
+   "citation_signal": "ICLR 2023; OpenAlex lists 316 citations (OpenAlex undercounts arXiv-first work). The canonical decomposition-first prompting method.",
+   "key_contribution": "Two stages: (1) a decomposition prompt returns an ordered list of simpler subquestions; (2) each subquestion is solved sequentially with all prior subquestions and generated answers appended, with the original problem as the final subquestion. code-davinci-002 with 14 exemplars: SCAN length split 99.7% vs 16.2% CoT (rivaling neuro-symbolic models trained on >15k examples); last-letter concatenation at length 12: 74.0 vs 31.8 CoT; GSM8K overall 62.39 vs 60.87 but on 5+-step problems 45.23 vs 39.07; DROP non-football 82.45 vs 74.77.",
+   "design_implication": "Decomposition pays off specifically on easy-to-hard generalization and long-horizon problems (5+ steps), and is roughly neutral on 2-step problems, so a production planner should gate decomposition by estimated depth rather than always decomposing. Implement sub-goal solving as a running context in which each solved sub-goal's answer is appended before the next, and always re-ask the original question last to force composition."
+  },
+  {
+   "title": "Decomposed Prompting: A Modular Approach for Solving Complex Tasks",
+   "authors": "Tushar Khot, Harsh Trivedi, Matthew Finlayson, Yao Fu, Kyle Richardson, Peter Clark, Ashish Sabharwal",
+   "year": 2022,
+   "venue": "ICLR 2023 (camera ready); arXiv 2210.02406",
+   "url": "https://arxiv.org/abs/2210.02406",
+   "arxiv_id": "2210.02406",
+   "citation_signal": "ICLR 2023 top-venue paper from AI2; directly spawned ADaPT and is the reference design for modular sub-task handler libraries.",
+   "key_contribution": "A decomposer LLM writes a program of sub-task calls; each sub-task is served by a handler from a shared library that can be a few-shot prompt, a further-decomposed prompt (recursion), or a symbolic function (e.g., Elasticsearch retrieval). Recursive list reversal splits lists in half until a base case (<4 items) that CoT handles accurately and generalizes to 10-item lists where CoT fails; k-th letter concatenation stays near 100% on longer inputs while CoT drops; CommaQA-E compositional split improves while CoT drops; open-domain multi-hop QA (2WikiMultihopQA, MuSiQue, HotpotQA) with Flan-T5-XXL beats all baselines; a decomposed answer-extraction sub-task lifts MultiArith 78 -> 95 and GSM8K 36 -> 50.6.",
+   "design_implication": "Model the component as a registry of sub-task handlers (LLM prompt, tool, retriever, recursive planner) addressed by name, so handlers can be unit-tested, swapped, and reused across domains without touching the decomposer. Make recursion a first-class handler type with an explicit base-case predicate (input size or confidence). Dedicated answer-extraction/format-normalization sub-tasks are cheap and measurably improve downstream parsing."
+  },
+  {
+   "title": "Successive Prompting for Decomposing Complex Questions",
+   "authors": "Dheeru Dua, Shivanshu Gupta, Sameer Singh, Matt Gardner",
+   "year": 2022,
+   "venue": "EMNLP 2022 (main, 2022.emnlp-main.81); arXiv 2212.04092",
+   "url": "https://arxiv.org/abs/2212.04092",
+   "arxiv_id": "2212.04092",
+   "citation_signal": "EMNLP 2022 main-conference paper; cited as a baseline by Decomposed Prompting and later decomposition work.",
+   "key_contribution": "Iteratively alternates a question-decomposition step (produce the next simple sub-question) and an answering step until the final answer, separating the supervision for decomposing from the supervision for answering. This allows in-context exemplar selection per reasoning step, synthetic generation of intermediate-question training data, and swapping in fine-tuned components for steps an LLM handles poorly. Best model gains ~5% absolute F1 on few-shot DROP versus a state-of-the-art model with equal supervision.",
+   "design_implication": "Interleaving 'next sub-question' and 'answer it' as separate calls lets the component retrieve different few-shot exemplars for each step and route individual steps to specialized/fine-tuned executors (e.g., a numeric-extraction model for test logs). Keep decomposition data (sub-question traces) as a reusable asset: it can bootstrap a smaller planner, which ReWOO later confirms (7B planner matching GPT-3.5 blueprints)."
+  },
+  {
+   "title": "Measuring and Narrowing the Compositionality Gap in Language Models (Self-Ask)",
+   "authors": "Ofir Press, Muru Zhang, Sewon Min, Ludwig Schmidt, Noah A. Smith, Mike Lewis",
+   "year": 2022,
+   "venue": "Findings of EMNLP 2023; arXiv 2210.03350",
+   "url": "https://arxiv.org/abs/2210.03350",
+   "arxiv_id": "2210.03350",
+   "citation_signal": "Findings of EMNLP 2023; the 'compositionality gap' metric and self-ask + search pattern are widely reused in retrieval-augmented decomposition.",
+   "key_contribution": "Defines the compositionality gap as the fraction of multi-hop questions whose sub-questions are all answered correctly but whose composition fails; it stays roughly constant at ~40% across GPT-3 sizes, so scale alone does not fix composition. Self-ask makes the model explicitly pose and answer follow-up questions before the final answer and lets a search engine answer each follow-up. Davinci-002 accuracy: Bamboogle direct 17.6 / CoT 46.4 / self-ask 57.6 / self-ask+search 60.0; 2WikiMultiHopQA 25.4 / 29.8 / 30.0 / 40.1; Musique 5.6 / 12.6 / 13.8 / 15.2.",
+   "design_implication": "Track the compositionality gap as a first-class metric: sub-goal correctness vs end-to-end correctness. Structure sub-question output as a parseable scaffold ('Follow up:' / 'Intermediate answer:') so a retrieval tool can be injected at each hop; the biggest gains come when retrieval is attached to decomposed sub-questions (2Wiki +10 points) rather than to the original question."
+  },
+  {
+   "title": "Plan-and-Solve Prompting: Improving Zero-Shot Chain-of-Thought Reasoning by Large Language Models",
+   "authors": "Lei Wang, Wanyu Xu, Yihuai Lan, Zhiqiang Hu, Yunshi Lan, Roy Ka-Wei Lee, Ee-Peng Lim",
+   "year": 2023,
+   "venue": "ACL 2023 (long, pp. 2609-2634); arXiv 2305.04091",
+   "url": "https://arxiv.org/abs/2305.04091",
+   "arxiv_id": "2305.04091",
+   "citation_signal": "ACL 2023 main-conference long paper; the zero-shot plan-then-execute prompt is reproduced in many production prompt libraries and surveys.",
+   "key_contribution": "Zero-shot trigger that first devises a plan then executes it. PS: 'Let's first understand the problem and devise a plan to solve the problem. Then, let's carry out the plan and solve the problem step by step.' PS+ adds variable extraction and calculation-care instructions. text-davinci-003 averages over six arithmetic sets: Zero-shot-CoT 70.4, PS 72.9, PS+ 76.7, Zero-shot-PoT 73.5, few-shot Manual-CoT 77.6 (GSM8K: 56.4 -> 59.3). Error analysis on 100 wrong GSM8K answers: missing-step errors drop 12% -> 7% and calculation errors 7% -> 5%, while semantic misunderstanding stays at 27%.",
+   "design_implication": "A cheap, model-agnostic default for the 'plan' phase: a single call that must emit the plan before executing it, with domain-specific 'extract relevant variables' instructions (e.g., extract part numbers, tolerances, log timestamps). Expect it to fix omitted steps but not semantic misreadings; semantic errors require retrieval/grounding or verification, not more planning text."
+  },
+  {
+   "title": "ReAct: Synergizing Reasoning and Acting in Language Models",
+   "authors": "Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan, Yuan Cao",
+   "year": 2022,
+   "venue": "ICLR 2023; arXiv 2210.03629",
+   "url": "https://arxiv.org/abs/2210.03629",
+   "arxiv_id": "2210.03629",
+   "citation_signal": "ICLR 2023; the default agent loop in LangChain, LlamaIndex and most agent frameworks; the baseline every planner-executor paper (ReWOO, LLMCompiler, ADaPT, Reflexion) compares against.",
+   "key_contribution": "Interleaves Thought / Action / Observation steps. PaLM-540B: HotpotQA EM standard 28.7, CoT 29.4, CoT-SC 33.4, ReAct 27.4, ReAct->CoT-SC 35.1, CoT-SC->ReAct 34.2; FEVER 57.1 / 56.3 / 60.4 / 60.9 / 62.0 / 64.6. ALFWorld success 71% (best of 6; 57% average) vs Act 45% and BUTLER 37% (+34% absolute); WebShop 40.0% success / 66.6 score vs IL+RL 28.7% (+10% absolute). Error analysis on HotpotQA: ReAct hallucination 0% vs CoT 56%, but reasoning errors 47% vs 16% and search-result errors 23%.",
+   "design_implication": "Interleaved act-observe loops are the right executor for sub-goals that need environment feedback, and they nearly eliminate hallucination by grounding on observations. But they are less flexible in reasoning and more prone to loops, so production executors need a step cap, a repeated-action detector, and a fallback to pure reasoning (ReAct->CoT-SC) when the loop stalls. Combining both modes beats either alone."
+  },
+  {
+   "title": "Tree of Thoughts: Deliberate Problem Solving with Large Language Models",
+   "authors": "Shunyu Yao, Dian Yu, Jeffrey Zhao, Izhak Shafran, Thomas L. Griffiths, Yuan Cao, Karthik Narasimhan",
+   "year": 2023,
+   "venue": "NeurIPS 2023; arXiv 2305.10601",
+   "url": "https://arxiv.org/abs/2305.10601",
+   "arxiv_id": "2305.10601",
+   "citation_signal": "NeurIPS 2023; OpenAlex lists 565 citations (undercount for arXiv-first work); the reference search-based reasoning method generalized by GoT and RAP.",
+   "key_contribution": "Frames problem solving as search over 'thoughts' (coherent intermediate steps) with LLM-based state evaluation (value scoring sure/maybe/impossible, or voting) and BFS/DFS with pruning and backtracking. Game of 24: IO 7.3%, CoT 4.0%, CoT-SC(k=100) 9.0%, ToT b=1 45%, ToT b=5 74%; cost per case $0.74 (5.5k generated tokens) vs CoT best-of-100 $0.47. Creative writing GPT-4 coherency 7.56 vs CoT 6.93 (depth 2, b=1, 5 plans voted 5 times). Mini crosswords word-level 60% vs 15.6%; ablations: no pruning 41.5%, no backtracking 20%.",
+   "design_implication": "Use search only where sub-goals are verifiable or scorable and the task has a tree structure; it costs several times CoT in tokens. Default BFS with breadth b=5 and value-voting with 3-5 samples per state; include pruning (drop 'impossible') and backtracking, which the ablations show are the components that matter. Expose breadth, depth, and a step cap (ToT used 100 DFS steps / 10 intermediate steps) as configuration."
+  },
+  {
+   "title": "Graph of Thoughts: Solving Elaborate Problems with Large Language Models",
+   "authors": "Maciej Besta, Nils Blach, Ales Kubicek, Robert Gerstenberger, Michal Podstawski, Lukas Gianinazzi, Joanna Gajda, Tomasz Lehmann, Hubert Niewiadomski, Piotr Nyczyk, Torsten Hoefler",
+   "year": 2023,
+   "venue": "AAAI 2024; arXiv 2308.09687",
+   "url": "https://arxiv.org/abs/2308.09687",
+   "arxiv_id": "2308.09687",
+   "citation_signal": "AAAI 2024 (top-tier AI venue); from ETH Zurich SPCL with an open-source framework; introduces the latency/volume analysis used to compare prompting topologies.",
+   "key_contribution": "Models LLM thoughts as vertices and dependencies as edges in an arbitrary graph, adding operations CoT/ToT lack: Aggregate (merge many thoughts), Refine (self-loop improvement), Generate(k), Score, KeepBest(h). Introduces 'volume' (number of thoughts that can influence a thought): CoT latency N / volume N; ToT latency log_k N / volume O(log_k N); GoT latency log_k N / volume N. Sorting 128 elements with GPT-3.5: ~62% lower median error and >31% lower cost than ToT; ~65% lower error than CoT at 64 elements; set intersection, keyword counting and document merging (NDA merge) handled with split-solve-merge graphs.",
+   "design_implication": "The decomposition engine should represent a plan as a general DAG supporting map (split), reduce (aggregate), and refine (loop) nodes rather than a tree, because divide-and-conquer with merge is what makes long inputs (large specs, log files, BOMs) tractable. GoT's sorting recipe (split into 2, sort each 5x keep best 3, merge 10x keep best, improve 10x keep best) is a reusable template for merge-heavy engineering documents."
+  },
+  {
+   "title": "Reasoning with Language Model is Planning with World Model (RAP)",
+   "authors": "Shibo Hao, Yi Gu, Haodi Ma, Joshua Jiahua Hong, Zhen Wang, Daisy Zhe Wang, Zhiting Hu",
+   "year": 2023,
+   "venue": "EMNLP 2023; arXiv 2305.14992",
+   "url": "https://arxiv.org/abs/2305.14992",
+   "arxiv_id": "2305.14992",
+   "citation_signal": "EMNLP 2023 main conference; released the LLM Reasoners library; one of the two main MCTS-over-LLM references in the planning survey (with LLM-MCTS).",
+   "key_contribution": "Uses the same LLM as reasoning agent (proposes actions) and world model (predicts next state) inside MCTS (UCT selection, expansion, simulation, backpropagation). Rewards: action log-likelihood, state confidence (modal answer share across samples), self-evaluation P('Yes'), and task heuristics (goal conditions met). Blocksworld success (LLaMA-33B): CoT 0.17/0.02/0.00 at 2/4/6 steps vs RAP(20) 1.00/0.88/0.42, beating GPT-4 CoT (0.50/0.63/0.40), a 33% relative gain. GSM8K: CoT 29.4, CoT+SC(10) 46.8, L2M 25.5, RAP(10) 48.6, RAP(10)+aggregation 51.6. PrOntoQA proof accuracy 64.8 -> 78.8.",
+   "design_implication": "For plan generation where the system can simulate state transitions (configuration changes, test-sequence planning, CAD assembly ordering), MCTS with 10-20 iterations and a blended reward (model confidence + task heuristic) materially outperforms sequential prompting. Task-specific heuristics (e.g., number of requirements satisfied, tests passing) should be pluggable reward functions."
+  },
+  {
+   "title": "ReWOO: Decoupling Reasoning from Observations for Efficient Augmented Language Models",
+   "authors": "Binfeng Xu, Zhiyuan Peng, Bowen Lei, Subhabrata Mukherjee, Yuchen Liu, Dongkuan Xu",
+   "year": 2023,
+   "venue": "arXiv preprint 2305.18323 (no peer-reviewed venue listed)",
+   "url": "https://arxiv.org/abs/2305.18323",
+   "arxiv_id": "2305.18323",
+   "citation_signal": "Widely adopted in industry: implemented as a reference planner in LangGraph's planning-agents guide alongside Plan-and-Execute and LLMCompiler.",
+   "key_contribution": "Splits the augmented LM into Planner (writes a full blueprint of (Plan, #E_s) pairs with evidence variables before any tool runs), Worker (executes tools and fills #E variables), and Solver (composes final answer). gpt-3.5-turbo: HotpotQA accuracy 40.8 -> 42.4 with tokens 9795 -> 1986 (~5x); TriviaQA 59.4 -> 66.6 with tokens 4213 -> 1341; average 64% token reduction across six benchmarks with reported average +4.4% accuracy. With all tools returning 'No evidence found', accuracy drops 29.2 vs ReAct's 40.8 and tokens fall rather than rise. A LoRA-tuned 7B LLaMA planner trained on GPT-3.5 blueprints matches GPT-3.5 on HotpotQA/TriviaQA/StrategyQA.",
+   "design_implication": "Plan-once-execute-many is the default for cost: each tool call no longer re-sends the full history. Use typed evidence variables (#E1...) that later steps reference, which also enables static dependency analysis. Because the planner never sees observations, add a replanning hook for tool failures. Blueprints are an ideal distillation target: log them to fine-tune a small planner."
+  },
+  {
+   "title": "An LLM Compiler for Parallel Function Calling",
+   "authors": "Sehoon Kim, Suhong Moon, Ryan Tabrizi, Nicholas Lee, Michael W. Mahoney, Kurt Keutzer, Amir Gholami",
+   "year": 2023,
+   "venue": "ICML 2024; arXiv 2312.04511",
+   "url": "https://arxiv.org/abs/2312.04511",
+   "arxiv_id": "2312.04511",
+   "citation_signal": "ICML 2024; Semantic Scholar lists 242 citations; implemented in LangGraph and referenced by OpenAI/LangChain as the parallel planning pattern.",
+   "key_contribution": "Three components: a Planner that streams a DAG of tasks whose arguments reference earlier outputs with $N placeholders; a Task Fetching Unit that resolves dependencies greedily and dispatches tasks the moment inputs are available (no LLM needed); an Executor that runs tools concurrently; plus dynamic replanning via a joiner that feeds results back to the planner. Versus ReAct: HotpotQA GPT-3.5 1.80x latency / 3.37x cost at equal accuracy (62.0 vs 62.5); Movie Recommendation 3.74x latency / 6.73x cost with accuracy 77.1 vs 72.5; ParallelQA GPT-4 2.15x / 4.65x; Game of 24 vs ToT 2.89x faster at 75.3 vs 74.0. Up to 35% lower latency than OpenAI parallel function calling. Documents ReAct failure modes: ~10% of LLaMA-2 HotpotQA runs looped past 4 calls; ~85% of GPT-3.5 Movie Rec runs stopped before completing all 8 searches.",
+   "design_implication": "The production planner should emit a machine-readable DAG with explicit placeholder references, and a non-LLM scheduler should run ready nodes concurrently (topological frontier scheduling). Keep a joiner/replan step bounded by a max replan count. This is the single highest-leverage design for latency and cost in tool-heavy engineering workloads (e.g., querying many test-log shards or requirement IDs in parallel)."
+  },
+  {
+   "title": "HuggingGPT: Solving AI Tasks with ChatGPT and its Friends in Hugging Face",
+   "authors": "Yongliang Shen, Kaitao Song, Xu Tan, Dongsheng Li, Weiming Lu, Yueting Zhuang",
+   "year": 2023,
+   "venue": "NeurIPS 2023 (Main Conference Track); arXiv 2303.17580",
+   "url": "https://arxiv.org/abs/2303.17580",
+   "arxiv_id": "2303.17580",
+   "citation_signal": "NeurIPS 2023; Paper Digest lists it among the most influential NeurIPS 2023 papers; the JARVIS open-source release had broad industry uptake.",
+   "key_contribution": "Four-stage controller: task planning, model selection, execution, response generation. Plans are JSON task lists with fields task, id, dep (prerequisite ids, [-1] if none) and args (text/image/audio/video), using '<resource>-task_id' placeholders substituted at run time; tasks run when all deps finish and independent tasks run in parallel. Uses specification-based instruction (fixed template slot filling), demonstration-based parsing (few-shot), temperature 0 and a logit bias of 0.2 on '{' and '}' to enforce JSON. Planning evaluation on 3,497 GPT-4-labeled requests: GPT-3.5 single-task F1 54.45, sequential F1 51.92, graph F1 51.91; on a 46-example human set GPT-4 reaches 41.4% (sequential) and 58.3% (graph) vs GPT-3.5 18.2% / 20.8%. Limitations: planning quality not guaranteed, multiple-call latency, context limits on tool descriptions, format instability.",
+   "design_implication": "Adopt a strict JSON task schema (id, type, deps, args with typed resource references) validated by a parser, with constrained decoding or a repair step, because planning F1 is only ~50% and format instability causes workflow failures. Model-selection by capability description is the general pattern for routing sub-tasks to specialized engineering tools (static analyzers, CAD parsers, log analyzers). Budget the planner's context for tool descriptions and retrieve only relevant tools when the catalog is large."
+  },
+  {
+   "title": "ADaPT: As-Needed Decomposition and Planning with Language Models",
+   "authors": "Archiki Prasad, Alexander Koller, Mareike Hartmann, Peter Clark, Ashish Sabharwal, Mohit Bansal, Tushar Khot",
+   "year": 2023,
+   "venue": "Findings of NAACL 2024; arXiv 2311.05772",
+   "url": "https://arxiv.org/abs/2311.05772",
+   "arxiv_id": "2311.05772",
+   "citation_signal": "Findings of NAACL 2024 from UNC/AI2 (authors of Decomposed Prompting); the main reference for recursive, failure-triggered decomposition and used as a baseline by TDAG.",
+   "key_contribution": "A recursive controller first lets a ReAct-style executor attempt the whole task; only on self-reported failure does it call a planner that emits 3-5 sub-tasks joined by And (sequential) / Or (alternatives) operators, each recursively passed back to the controller until success or depth d_max (3 for ALFWorld/WebShop, 4 for TextCraft). GPT-3.5-class models: ALFWorld 71.6 vs ReAct 43.3, Plan-and-Execute 43.3, Reflexion 57.5; WebShop 44.0 vs 32.0 / 17.0 / 35.0; TextCraft 52.0 vs 19.0 / 27.0 / 32.0. Success rises with d_max in {1,2,3}; average decomposition depth adapts to problem depth (1.9 -> 2.8); with weak atomic-skill executors ALFWorld rises 3.3% -> 41.7%.",
+   "design_implication": "Decompose lazily: try execution first, decompose only on failure, and recurse with a configurable d_max (default 3). Plans should support AND (ordered) and OR (fallback alternatives) composition so the controller can try alternatives without replanning. Up-front Plan-and-Execute can underperform even ReAct on some tasks (WebShop 17 vs 32), so static decomposition must not be the only mode."
+  },
+  {
+   "title": "TDAG: A Multi-Agent Framework based on Dynamic Task Decomposition and Agent Generation",
+   "authors": "Yaoxiang Wang, Zhiyong Wu, Junfeng Yao, Jinsong Su",
+   "year": 2024,
+   "venue": "Neural Networks (journal, accepted); arXiv 2402.10178",
+   "url": "https://arxiv.org/abs/2402.10178",
+   "arxiv_id": "2402.10178",
+   "citation_signal": "Peer-reviewed journal publication (Neural Networks) with a released benchmark (ItineraryBench); extends ADaPT and provides the clearest quantification of cascading-failure reduction from dynamic re-decomposition.",
+   "key_contribution": "Main agent decomposes a task, executes a subtask, then re-decomposes remaining subtasks conditioned on results; each subtask is handled by a dynamically generated sub-agent with a rewritten tool document and skills retrieved (SentenceBERT) from an incremental skill library. ItineraryBench (364 samples, partial credit: executability 60 / constraints 20 / efficiency 20): TDAG 49.08 vs ADaPT 44.74, Plan-and-Solve 43.68, ReAct 43.02, Plan-and-Execute 42.85; ablations without agent generation 46.69, without dynamic decomposition 46.23. Cascading failures 34.78% of errors for Plan-and-Execute vs 4.35% for TDAG. WebShop success 45.0 vs ADaPT 44.0 / ReAct 29.0; TextCraft 73.5% vs 52.0% / 19.0%.",
+   "design_implication": "After each sub-goal completes, re-plan the remainder rather than executing a frozen plan; this is the main lever against cascading failures. Generate per-sub-task executor configurations (tool subset, retrieved skills, tailored instructions) rather than one generic executor, and persist successful sub-task solutions as reusable skills, which ties decomposition to the caching component."
+  },
+  {
+   "title": "Reflexion: Language Agents with Verbal Reinforcement Learning",
+   "authors": "Noah Shinn, Federico Cassano, Edward Berman, Ashwin Gopinath, Karthik Narasimhan, Shunyu Yao",
+   "year": 2023,
+   "venue": "NeurIPS 2023 (Main Conference Track); arXiv 2303.11366",
+   "url": "https://arxiv.org/abs/2303.11366",
+   "arxiv_id": "2303.11366",
+   "citation_signal": "NeurIPS 2023; OpenAlex lists 286 citations (undercount); the standard reference for reflection-driven re-planning in agent frameworks.",
+   "key_contribution": "Agents verbally reflect on task feedback after a failed trial and store reflections in an episodic memory (cap usually 1-3 entries to fit context), conditioning the next attempt. AlfWorld: ReAct+Reflexion completes 130/134 tasks (~97%), +22% absolute over ReAct within 12 trials while ReAct alone plateaus by trial 6-7. HotPotQA EM: CoT+Reflexion GPT-4 0.68 -> 0.80, ReAct+Reflexion GPT-4 0.39 -> 0.51; self-reflection adds ~8 points over episodic memory alone. Code (GPT-4 pass@1): HumanEval 80.1 -> 91.0, Rust 60 -> 68, LeetcodeHard 7.5 -> 15.0, but MBPP Python 80.1 -> 77.1 due to a 16.3% false-positive rate in self-generated tests. WebShop showed no significant gain (stopped after 4 trials). Limitations: local minima, sliding-window memory, reliance on self-evaluation.",
+   "design_implication": "Implement a bounded retry loop (default 3 trials, memory cap 3 reflections) that writes a structured 'what went wrong / what to change' note before replanning, and feed it to the planner. Reflexion's gains come from real feedback (environment success, unit tests); where the feedback is the model's own tests, false positives can make results worse, so the verification component must supply the signal, not the planner."
+  },
+  {
+   "title": "Self-Refine: Iterative Refinement with Self-Feedback",
+   "authors": "Aman Madaan, Niket Tandon, Prakhar Gupta, Skyler Hallinan, Luyu Gao, Sarah Wiegreffe, Uri Alon, Nouha Dziri, Shrimai Prabhumoye, Yiming Yang, Shashank Gupta, Bodhisattwa Prasad Majumder, Katherine Hermann, Sean Welleck, Amir Yazdanbakhsh, Peter Clark",
+   "year": 2023,
+   "venue": "NeurIPS 2023 (Main Conference Track); arXiv 2303.17651",
+   "url": "https://arxiv.org/abs/2303.17651",
+   "arxiv_id": "2303.17651",
+   "citation_signal": "NeurIPS 2023; the canonical generate-feedback-refine loop and the pattern Anthropic documents as the most common prompt-chaining use ('evaluator-optimizer').",
+   "key_contribution": "A single LLM alternates generator, feedback provider and refiner roles at inference time with no training. Across 7 tasks (dialog, code optimization, math reasoning, etc.) with GPT-3.5/ChatGPT/GPT-4, outputs improve ~20% absolute on average over one-step generation and are preferred by humans and automatic metrics.",
+   "design_implication": "A draft -> critique against explicit criteria -> revise chain is a low-cost quality lever for sub-goal outputs whose quality criteria can be stated (style, completeness against a checklist, spec coverage). Cap iterations (2-3) and make criteria explicit in the critique prompt; Huang et al. attribute Self-Refine's gains partly to weak initial prompts, so measure against a strong single-shot baseline before adopting."
+  },
+  {
+   "title": "Large Language Models Cannot Self-Correct Reasoning Yet",
+   "authors": "Jie Huang, Xinyun Chen, Swaroop Mishra, Huaixiu Steven Zheng, Adams Wei Yu, Xinying Song, Denny Zhou",
+   "year": 2023,
+   "venue": "ICLR 2024; arXiv 2310.01798",
+   "url": "https://arxiv.org/abs/2310.01798",
+   "arxiv_id": "2310.01798",
+   "citation_signal": "ICLR 2024 from Google DeepMind; the most-cited negative result on self-correction and routinely invoked when designing reflection loops.",
+   "key_contribution": "Intrinsic self-correction (no external feedback or oracle labels) degrades reasoning accuracy: GPT-4 GSM8K 95.5 -> 91.5 (round 1) -> 89.0 (round 2); GPT-4 HotpotQA 49.0 -> 43.0 by round 2; GPT-3.5 CommonSenseQA 75.8 -> 38.1. Prior positive results (RCI, Reflexion) relied on oracle labels to decide when to stop; 'the improvements vanish when oracle labels are not available'. Multi-agent debate underperforms simple self-consistency at equal sample counts (GPT-3.5 GSM8K, 9 responses: debate 83.0 vs SC 88.2).",
+   "design_implication": "Never let the planner decide a sub-goal is wrong purely by re-reading its own output. Reflection/replanning must be triggered by external signals: tool errors, failing tests, schema validation, retrieval mismatches, verifier output, or human review. When no external signal exists, spend the budget on self-consistency sampling instead of critique rounds."
+  },
+  {
+   "title": "On the Planning Abilities of Large Language Models: A Critical Investigation",
+   "authors": "Karthik Valmeekam, Matthew Marquez, Sarath Sreedharan, Subbarao Kambhampati",
+   "year": 2023,
+   "venue": "NeurIPS 2023 (Spotlight); arXiv 2305.15771",
+   "url": "https://arxiv.org/abs/2305.15771",
+   "arxiv_id": "2305.15771",
+   "citation_signal": "NeurIPS 2023 spotlight; the basis of PlanBench and the 'LLM-Modulo' framework; the standard citation for limits of autonomous LLM planning.",
+   "key_contribution": "On IPC-style domains, GPT-4 autonomously produces valid plans for 206/600 Blocksworld instances (34.3% one-shot; 35.6% with CoT) and 28/200 Logistics (14%), averaging ~12% across domains; GPT-3.5 reaches 6.1%; humans 78%. Obfuscated 'Mystery Blocksworld' collapses to 2-9%, indicating reliance on surface patterns. With a sound verifier (VAL) returning feedback for up to 15 backprompt rounds, GPT-4 fixes 82% of previously failed Blocksworld instances (avg 3.68 rounds) and 70% of Logistics (3.31 rounds). LLM plans used as seeds cut LPG planner search steps from 15.8 to 8.9 (Blocksworld) and 77.5 to 51.3 (Logistics).",
+   "design_implication": "Treat the LLM planner as a heuristic proposer, not an oracle: pair it with an external verifier (schema checks, dependency-cycle detection, precondition checks, test execution) and backprompt with the verifier's error, bounded at ~5 rounds (most fixes occur in ~3-4). Where a formal model exists (scheduling, BOM constraints), let a symbolic solver own correctness and use the LLM plan as a seed."
+  },
+  {
+   "title": "Faith and Fate: Limits of Transformers on Compositionality",
+   "authors": "Nouha Dziri, Ximing Lu, Melanie Sclar, Xiang Lorraine Li, Liwei Jiang, Bill Yuchen Lin, Peter West, Chandra Bhagavatula, Ronan Le Bras, Jena D. Hwang, Soumya Sanyal, Sean Welleck, Xiang Ren, Allyson Ettinger, Zaid Harchaoui, Yejin Choi",
+   "year": 2023,
+   "venue": "NeurIPS 2023 (Main Conference Track); arXiv 2305.18654",
+   "url": "https://arxiv.org/abs/2305.18654",
+   "arxiv_id": "2305.18654",
+   "citation_signal": "NeurIPS 2023 from AI2/UW; the principal theoretical and empirical account of why decomposition is needed (compositional depth failure).",
+   "key_contribution": "Models three compositional tasks (multi-digit multiplication, Einstein logic grid puzzles, dynamic programming) as computation graphs and shows transformer accuracy decays as graph depth/width grow; models succeed via 'linearized subgraph matching' of patterns seen in training rather than systematic procedures. Theoretical argument: autoregressive error compounds so performance can degrade rapidly with task complexity.",
+   "design_implication": "Keep each executor call's computation graph shallow: the decomposer's job is to bound per-step depth (e.g., one arithmetic operation, one join, one lookup per sub-goal) and delegate exact computation to tools. Use the computation-graph depth of a task as the gating heuristic for when to decompose and how finely."
+  },
+  {
+   "title": "AgentBench: Evaluating LLMs as Agents",
+   "authors": "Xiao Liu, Hao Yu, Hanchen Zhang, Yifan Xu, et al. (24 authors incl. Yu Su, Huan Sun, Minlie Huang, Yuxiao Dong, Jie Tang)",
+   "year": 2023,
+   "venue": "ICLR 2024; arXiv 2308.03688",
+   "url": "https://arxiv.org/abs/2308.03688",
+   "arxiv_id": "2308.03688",
+   "citation_signal": "ICLR 2024; the most widely used multi-environment agent benchmark (Tsinghua/OSU/Berkeley), with a public leaderboard.",
+   "key_contribution": "Eight interactive environments (Operating System, Database, Knowledge Graph, Digital Card Game, Lateral Thinking Puzzles, House Holding/ALFWorld, Web Shopping, Web Browsing) across 29 API and open-source LLMs. gpt-4 leads with overall score 4.01, best on 6/8 environments, 78% success on House Holding; a large gap separates commercial models from open-source models <=70B. Failure analysis: the predominant cause is Task Limit Exceeded (agent exhausts its step budget, often looping; roughly a third of failures on average), then Invalid Format (~14%) and Invalid Action (~10%); Context Limit Exceeded is rare (~1%). Code training has mixed effects.",
+   "design_implication": "Instrument the component for the three dominant failure classes: step-budget exhaustion (add loop detection and progress checks), format violations (schema-constrained outputs plus repair), and invalid actions (validate tool names/arguments against the registry before dispatch). Choose planner models by agentic benchmark results, not general QA scores; open-source executors may need stronger guardrails."
+  },
+  {
+   "title": "Understanding the planning of LLM agents: A survey",
+   "authors": "Xu Huang, Weiwen Liu, Xiaolong Chen, Xingmei Wang, Hao Wang, Defu Lian, Yasheng Wang, Ruiming Tang, Enhong Chen",
+   "year": 2024,
+   "venue": "arXiv preprint 2402.02716 (USTC / Huawei Noah's Ark)",
+   "url": "https://arxiv.org/abs/2402.02716",
+   "arxiv_id": "2402.02716",
+   "citation_signal": "Widely cited taxonomy survey of LLM agent planning (task decomposition, multi-plan selection, external planner, reflection, memory); frequently used as the organizing framework in later agent papers.",
+   "key_contribution": "Classifies planning methods into five families. Task decomposition is split into decomposition-first (HuggingGPT, Plan-and-Solve, ProgPrompt: stronger task fidelity, less forgetting, but brittle to early errors) and interleaved (CoT, ReAct, PAL, PoT: adapts to feedback but can drift on long trajectories). Multi-plan selection (self-consistency, ToT, GoT, RAP, LLM-MCTS, LLM-A*) broadens exploration at high token cost with unproven LLM ranking reliability. External planner-aided (LLM+P/PDDL with Fast Downward, LLM-DP, LLM+ASP, SwiftSage) provides soundness but requires accurate formalization. Reflection (Self-Refine, Reflexion, CRITIC) improves fault tolerance without convergence guarantees. Memory-augmented planning uses RAG or fine-tuning. Open challenges: hallucinated plans, feasibility, efficiency, step-wise evaluation, multimodal feedback.",
+   "design_implication": "A production component should implement both decomposition modes behind one interface and select per task: decomposition-first when sub-goals are predictable and parallelizable, interleaved when feedback is needed. Treat plan feasibility and hallucinated tool/entity references as explicit validation checks, and evaluate step-wise (plan quality, sub-goal success) rather than only end-to-end."
+  },
+  {
+   "title": "A Survey on Large Language Model based Autonomous Agents",
+   "authors": "Lei Wang, Chen Ma, Xueyang Feng, Zeyu Zhang, Hao Yang, Jingsen Zhang, Zhiyuan Chen, Jiakai Tang, Xu Chen, Yankai Lin, Wayne Xin Zhao, Zhewei Wei, Ji-Rong Wen",
+   "year": 2023,
+   "venue": "arXiv 2308.11432 (v7, 2025); DOI listed on arXiv page (journal version)",
+   "url": "https://arxiv.org/abs/2308.11432",
+   "arxiv_id": "2308.11432",
+   "citation_signal": "One of the most-cited agent surveys (Renmin University, Gaoling School); maintains a public paper list; 35 pages, 7 revisions through 2025.",
+   "key_contribution": "Proposes a unified construction framework for LLM-based agents covering the majority of prior work, surveys applications in social science, natural science and engineering, reviews evaluation strategies (subjective and objective), and lists open challenges.",
+   "design_implication": "Use its agent-construction framework as the interface boundary for the decomposition component: the planner module must expose hooks for memory (plan/skill reuse), action (tool registry), and profile/role (domain configuration), so that the same component slots into any agent architecture the company adopts."
+  },
+  {
+   "title": "Building effective agents",
+   "authors": "Erik Schluntz, Barry Zhang (Anthropic)",
+   "year": 2024,
+   "venue": "Anthropic engineering blog / research post",
+   "url": "https://www.anthropic.com/research/building-effective-agents",
+   "arxiv_id": "",
+   "citation_signal": "Authoritative state-of-practice document from a frontier lab; its workflow taxonomy (prompt chaining, routing, parallelization, orchestrator-workers, evaluator-optimizer, agents) is the de facto industry vocabulary.",
+   "key_contribution": "Distinguishes workflows (predefined code paths) from agents (LLM-directed control flow) and recommends the simplest option that works. Defines composable patterns: prompt chaining with programmatic gates between steps; routing to specialized prompts/models; parallelization via sectioning (independent subtasks) and voting; orchestrator-workers where a central LLM dynamically decomposes and delegates (for unpredictable sub-tasks such as multi-file code changes); evaluator-optimizer loops when criteria are clear; autonomous agents only for open-ended tasks in trusted environments with iteration caps, sandbox testing and human checkpoints. Stresses agent-computer interface design: docstring-quality tool descriptions, poka-yoke parameters (e.g., absolute paths), and room to reason before committing.",
+   "design_implication": "The component's configuration should expose exactly these modes as selectable strategies with programmatic gates, and the orchestrator-workers pattern is the natural implementation of dynamic decomposition. Invest in tool/sub-task interface descriptions as heavily as in the planner prompt, enforce max-iteration stopping conditions, and provide human-checkpoint hooks for engineering-critical steps."
+  },
+  {
+   "title": "Planning Agents (Plan-and-Execute, ReWOO, LLMCompiler in LangGraph)",
+   "authors": "LangChain (Will Fu-Hinthorn et al.)",
+   "year": 2024,
+   "venue": "LangChain engineering blog",
+   "url": "https://www.langchain.com/blog/planning-agents",
+   "arxiv_id": "",
+   "citation_signal": "Reference implementations in LangGraph used widely in industry; documents the practical plan-and-execute pattern family and its replanning step.",
+   "key_contribution": "Describes three planner-executor designs: Plan-and-Execute (planner emits multi-step plan, executors run each step with tools, replanner reviews results and either finishes or emits a follow-up plan; limited by serial execution), ReWOO (variable-assigned steps with evidence substitution, per-task minimal context, still sequential), and LLMCompiler (streamed DAG, task-fetching unit for parallel execution, joiner decides finish vs replan; cites ~3.6x speedup). Benefits: fewer calls to the large model, cheaper models for sub-tasks, and better quality from forcing the planner to reason through all steps up front.",
+   "design_implication": "Implement planner, executor and replanner as separate nodes in a state graph with explicit state (plan, past_steps, evidence), stream the plan so execution starts before planning finishes, and use the joiner/replanner to bound total iterations. Route sub-tasks to smaller models by default and reserve the large model for planning and synthesis."
+  },
+  {
+   "title": "Claude prompting best practices (chain complex prompts, subagent orchestration, parallel tool calling)",
+   "authors": "Anthropic (platform documentation)",
+   "year": 2026,
+   "venue": "Anthropic developer documentation",
+   "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+   "arxiv_id": "",
+   "citation_signal": "Official vendor documentation defining current state of practice for decomposition via prompt chaining and subagents on frontier models.",
+   "key_contribution": "States that explicit prompt chaining (sequential API calls) remains useful when intermediate outputs must be inspected or a pipeline structure enforced, with the most common pattern being self-correction (draft -> review against criteria -> refine), each step a separate call for logging, evaluation and branching. Documents native subagent orchestration and warns of overuse (spawning subagents when a direct call suffices), recommending explicit guidance: use subagents for parallelizable, isolated-context, independent workstreams; work directly for simple sequential tasks. Documents that independent tool calls run in parallel and that this can be steered to ~100% with an explicit instruction, with dependent calls kept sequential.",
+   "design_implication": "Make the decomposition component's parallelism explicit in the planner prompt (independent sub-goals -> parallel calls; dependent -> sequential), and include a damping rule so trivial tasks are not decomposed or delegated. Keep each chain step a separately logged call so verification and caching components can attach at the boundaries."
+  }
+ ],
+ "techniques": [
+  {
+   "name": "Decomposition-first sequential solving with answer carry-forward (Least-to-Most / Plan-and-Solve)",
+   "description": "Stage 1 (decompose): prompt the planner with the task plus domain exemplars and require an ordered list of sub-questions whose last item is the original task. Stage 2 (solve): for i in 1..n, build a prompt containing the task context, all prior (sub-question, answer) pairs, and sub-question i; store the answer. Return the answer to the final (original) sub-question. Zero-shot variant: a single call with the PS+ trigger ('first understand the problem, extract relevant variables and their corresponding numerals, and make a plan; then carry out the plan, calculate intermediate variables, solve step by step, and show the answer'). Add an answer-extraction sub-task at the end that normalizes the final output to the required schema.",
+   "source_titles": [
+    "Least-to-Most Prompting Enables Complex Reasoning in Large Language Models",
+    "Plan-and-Solve Prompting: Improving Zero-Shot Chain-of-Thought Reasoning by Large Language Models",
+    "Decomposed Prompting: A Modular Approach for Solving Complex Tasks"
+   ],
+   "when_to_use": "Tasks with predictable sub-steps, long horizons (5+ reasoning steps) or easy-to-hard generalization (longer inputs than exemplars); document- or spec-analysis tasks where sub-questions can be enumerated up front.",
+   "tradeoffs": "n+1 LLM calls instead of 1; roughly neutral on 2-3 step problems (GSM8K 2-step 76.7 vs 74.5) and strongly positive on 5+ steps (39.1 -> 45.2) and length generalization (SCAN 16% -> 99.7%). Fixed plans are brittle to early errors (decomposition-first con in the planning survey). Fixes missing-step errors (12% -> 7%) but not semantic misunderstanding (27%).",
+   "default_parameters": "Decompose only when estimated depth >= 3 steps or input length exceeds exemplar length; 3-8 sub-questions per plan (ADaPT uses 3-5); temperature 0 for decomposition; carry all prior sub-answers forward (L2M); always append the original question as the last sub-question; add a dedicated answer-extraction step (DecomP: MultiArith 78 -> 95)."
+  },
+  {
+   "name": "Modular sub-task handler library with recursive and symbolic handlers (Decomposed Prompting)",
+   "description": "Maintain a registry H = {name -> handler} where a handler is one of: (a) a few-shot LLM prompt specialized to one sub-task, (b) a symbolic function (retriever query, calculator, regex extractor, test runner, CAD/BOM parser), (c) the decomposer itself (recursion). The decomposer LLM emits a program: a sequence of (handler_name, input_expression) steps where inputs may reference earlier outputs by variable. The controller executes steps, dispatching to handlers; recursive handlers split the input (e.g., halve a list, chunk a document) until a base-case predicate (size < threshold or confidence > tau) holds, then merge. Each handler has its own exemplars, tests and version.",
+   "source_titles": [
+    "Decomposed Prompting: A Modular Approach for Solving Complex Tasks",
+    "Successive Prompting for Decomposing Complex Questions",
+    "Graph of Thoughts: Solving Elaborate Problems with Large Language Models"
+   ],
+   "when_to_use": "Multi-domain deployments where sub-tasks recur (extract IDs, look up a standard clause, compute a tolerance stack-up); long inputs that exceed what one call handles reliably (large specs, log files, BOMs); when parts of the task are better done symbolically.",
+   "tradeoffs": "Upfront engineering to build and test handlers; the decomposer must know the handler catalog (context cost, mitigated by retrieving relevant handlers). Large gains in length generalization and compositional splits; symbolic handlers eliminate hallucination for their step. Recursion needs a hard depth cap.",
+   "default_parameters": "Base case for recursion at inputs small enough for a single-call accuracy >= ~95% on a validation set (DecomP used list length < 4); max recursion depth 3-4 (ADaPT d_max); handler descriptions written as docstrings with examples and edge cases (Anthropic ACI guidance); retrieve top-k handlers (k ~ 5-10) into the planner prompt when the catalog exceeds ~20 entries (HuggingGPT context limitation)."
+  },
+  {
+   "name": "DAG planning with placeholder references and topological frontier scheduling (LLMCompiler / ReWOO / HuggingGPT)",
+   "description": "Planner emits a plan as a list of nodes {id, tool_or_handler, args, deps} where args may contain placeholders ($k or #E_k or <resource>-k) referring to outputs of node k; deps is derived from placeholders (plus explicit deps). Validate: all referenced ids exist, graph is acyclic, tool names are in the registry, arg schemas type-check. Scheduler (no LLM): maintain the ready frontier (nodes whose deps are all complete); dispatch all ready nodes concurrently up to a concurrency limit; on completion substitute outputs into dependents' placeholders and update the frontier. Optionally stream: begin executing nodes as soon as they are parsed. After the DAG completes, a joiner/solver LLM either produces the final answer or emits a new DAG given the collected evidence (dynamic replanning), bounded by max_replans.",
+   "source_titles": [
+    "An LLM Compiler for Parallel Function Calling",
+    "ReWOO: Decoupling Reasoning from Observations for Efficient Augmented Language Models",
+    "HuggingGPT: Solving AI Tasks with ChatGPT and its Friends in Hugging Face",
+    "Planning Agents (Plan-and-Execute, ReWOO, LLMCompiler in LangGraph)"
+   ],
+   "when_to_use": "Tool- and retrieval-heavy tasks with multiple independent lookups (query many requirement IDs, test-log shards, parts, standards clauses); cost- or latency-sensitive paths; when observations are not needed to decide the plan's shape.",
+   "tradeoffs": "Latency 1.8-3.7x lower and cost 3.4-6.7x lower than ReAct at equal or better accuracy (LLMCompiler); tokens ~5x lower on HotpotQA (ReWOO). Planner never sees observations, so plans can be wrong when the task shape depends on intermediate results; requires replanning and robust parsing (HuggingGPT planning F1 ~50%, format instability). Degrades gracefully on tool failure (ReWOO -29 vs ReAct -41).",
+   "default_parameters": "Temperature 0 for planning; JSON or line-based plan grammar with constrained decoding or a logit bias toward structural tokens (HuggingGPT used +0.2 on braces) plus a repair/retry pass; concurrency limit = tool rate limits (typically 4-16); max_replans = 2-3; per-node timeout and retry (1 retry) before marking failed and replanning; each node receives only its own inputs and a short task description (ReWOO) rather than the full history."
+  },
+  {
+   "name": "As-needed recursive decomposition with AND/OR plans (ADaPT, with TDAG re-decomposition)",
+   "description": "controller(task, depth): if depth > d_max return FAIL. result = executor(task) where the executor is an interleaved agent (ReAct-style) with a step cap that must end with an explicit completed/failed verdict, ideally confirmed by an external check. If success return. Else plan = planner(task, executor_trace) producing 3-5 sub-tasks combined with AND (all must succeed, in order) and OR (alternatives tried in order until one succeeds). Evaluate the logical expression by calling controller(sub, depth+1) for each operand; short-circuit OR on first success and AND on first failure. TDAG extension: after each AND operand completes, re-call the planner on the remaining sub-tasks conditioned on results so the rest of the plan adapts; optionally instantiate a per-sub-task executor configuration (tool subset, retrieved skills).",
+   "source_titles": [
+    "ADaPT: As-Needed Decomposition and Planning with Language Models",
+    "TDAG: A Multi-Agent Framework based on Dynamic Task Decomposition and Agent Generation",
+    "ReAct: Synergizing Reasoning and Acting in Language Models"
+   ],
+   "when_to_use": "Interactive or environment-dependent tasks where the right granularity is unknown in advance (debugging, incident triage, multi-file code changes, data pipelines); heterogeneous task difficulty where always decomposing would waste cost on easy cases.",
+   "tradeoffs": "Large gains over both ReAct and static Plan-and-Execute (ALFWorld 71.6 vs 43.3/43.3; TextCraft 52 vs 19/27) and far fewer cascading failures (TDAG 4.35% vs 34.78%). Costs extra calls on hard cases and relies on the executor's self-reported failure (which Huang et al. show is unreliable without external signals); worst case is exponential in d_max without caps.",
+   "default_parameters": "d_max = 3 (4 for deeply compositional domains); 3-5 sub-tasks per plan; executor step cap 10-20 actions; adapt d_max to executor strength (weaker executors benefit from deeper decomposition: 3.3% -> 41.7%); re-plan remaining sub-tasks after each completed sub-task (TDAG); temperature 0."
+  },
+  {
+   "name": "Search over thoughts: BFS/DFS tree search and MCTS over sub-goal states (ToT / GoT / RAP)",
+   "description": "Represent partial solutions as states; a proposer LLM generates k candidate next thoughts per state (sampling i.i.d. or proposing a list); an evaluator LLM scores states either independently (value: sure/likely/impossible, sampled v times and averaged) or comparatively (vote among candidates, sampled v times). BFS keeps the top-b states per level up to depth T; DFS explores with pruning when value is 'impossible' and backtracks. GoT generalization: allow Aggregate nodes that merge several states (divide-and-conquer with merge), Refine self-loops, and KeepBest(h). RAP variant: run MCTS with UCT where the LLM proposes actions and predicts next states; reward = weighted sum of action log-likelihood, state-confidence (modal share across samples), self-evaluation P(Yes), and task heuristic (e.g., constraints satisfied); run N iterations and return the highest-reward path (optionally aggregate answers across iterations).",
+   "source_titles": [
+    "Tree of Thoughts: Deliberate Problem Solving with Large Language Models",
+    "Graph of Thoughts: Solving Elaborate Problems with Large Language Models",
+    "Reasoning with Language Model is Planning with World Model (RAP)"
+   ],
+   "when_to_use": "Tasks with verifiable or scoreable intermediate states and combinatorial choice (scheduling, assembly ordering, constraint satisfaction, design-space exploration, test-sequence planning); merge-heavy tasks over large inputs (sorting/deduplicating requirement lists, merging overlapping documents).",
+   "tradeoffs": "Large accuracy gains where applicable (Game of 24 4% -> 74%; Blocksworld 4-step 0.02 -> 0.88; GoT sorting error -62% vs ToT) at 5-10x the tokens of a single CoT call (ToT $0.74 vs CoT-SC $0.47 per Game of 24 case); LLM ranking reliability is unproven in general (planning survey) and gains shrink on small instances (GoT at 32 elements negligible). Needs a hard step/iteration cap.",
+   "default_parameters": "ToT: BFS breadth b=5, value sampling v=3 per state, depth T = number of required steps (3 for Game of 24), DFS cap 100 steps / 10 intermediate steps; for generation tasks depth 2, 5 candidates, 5 votes. GoT sorting template: split 2, generate 5 keep 3, merge 10 keep 1, refine 10 keep 1. RAP: 10-20 MCTS iterations (RAP(20) > RAP(10)), UCT exploration, reward mixing confidence + task heuristic; aggregate answers across iterations for QA (+3 points)."
+  },
+  {
+   "name": "Reflection-driven replanning with external feedback and bounded episodic memory (Reflexion / Self-Refine, gated by Huang et al.)",
+   "description": "Loop for trial t = 1..T_max: run the plan/executor; obtain feedback f_t from an EXTERNAL source (tool error, failing unit tests, schema/constraint violation, verifier output, retrieval contradiction, human review). If f_t indicates success, stop. Else call a reflector LLM with (task, trajectory, f_t) to write a short structured reflection: root cause, what to do differently, which sub-goal to change. Append to a memory buffer capped at Omega entries (FIFO). Re-plan with the task + memory. Self-Refine variant for quality (not correctness): generate -> critique against an explicit rubric -> revise, 2-3 rounds. Never trigger replanning from a bare self-judgment of correctness.",
+   "source_titles": [
+    "Reflexion: Language Agents with Verbal Reinforcement Learning",
+    "Self-Refine: Iterative Refinement with Self-Feedback",
+    "Large Language Models Cannot Self-Correct Reasoning Yet",
+    "On the Planning Abilities of Large Language Models: A Critical Investigation"
+   ],
+   "when_to_use": "Any sub-goal with a real success signal: code (tests), structured outputs (schema), plans (precondition/dependency verifier), retrieval (citation check), configuration (dry-run). Quality refinement when rubric criteria are explicit (completeness vs checklist, style).",
+   "tradeoffs": "With real feedback: +22% absolute on AlfWorld within 12 trials, HumanEval 80 -> 91, 82% of failed Blocksworld plans fixed in ~3.7 verifier rounds. Without external feedback accuracy falls (GPT-4 GSM8K 95.5 -> 89.0); self-generated tests can have high false-positive rates (MBPP 16.3%) and reverse gains. Each trial multiplies cost; loops can settle in local minima.",
+   "default_parameters": "T_max = 3 trials (Reflexion stops HotPotQA after 3 consecutive failures; most verifier fixes land by round 3-4; cap 5 for verifier backprompting); memory cap Omega = 1-3 reflections; up to 6 generated unit tests for code with a note that self-generated tests must be treated as weak signals; Self-Refine 2-3 rounds with explicit rubric; temperature 0 for the reflector."
+  },
+  {
+   "name": "Multi-plan generation and selection by self-consistency voting",
+   "description": "Sample k candidate plans (or k sub-goal answers) at temperature T with the same prompt; normalize the outputs (e.g., canonical sub-goal list or final answer string); select by majority vote, or for plans by scoring each candidate with a lightweight checker (acyclic, all tools valid, covers all task requirements) and picking the modal valid plan. Use the agreement ratio (votes for winner / k) as a confidence score to route: high agreement -> execute; low agreement -> escalate to search or human.",
+   "source_titles": [
+    "Self-Consistency Improves Chain of Thought Reasoning in Language Models",
+    "Large Language Models Cannot Self-Correct Reasoning Yet",
+    "Understanding the planning of LLM agents: A survey"
+   ],
+   "when_to_use": "Final answers to closed-form sub-goals; selecting among candidate decompositions when no verifier exists; as a confidence estimator for routing and for deciding whether to decompose further.",
+   "tradeoffs": "k-fold token cost (parallelizable, so little added latency); large gains on reasoning (GSM8K +17.9) that saturate quickly; outperforms multi-agent debate at equal budget (88.2 vs 83.0 at 9 samples); only applies where answers can be canonicalized and offers no guarantee for open-ended text.",
+   "default_parameters": "k = 5 for plan selection and routine sub-goals, 10-20 for high-stakes answers, 40 as the published upper reference; T = 0.7 (top-k 40) for sampling; agreement threshold ~0.6 for 'confident'; run samples in parallel via the parallelization component."
+  },
+  {
+   "name": "Interleaved reasoning-acting executor with loop and premature-stop guards (ReAct hardened)",
+   "description": "For each sub-goal, run a loop of Thought -> Action(tool, args) -> Observation appended to context until a Finish action or step cap. Guards: (1) validate action names/args against the registry before dispatch (AgentBench Invalid Action); (2) detect repeated identical or semantically equivalent actions (hash of tool+args) and inject a 'you already tried this; change approach or finish' message, or escalate to replanning (LLMCompiler observed ~10% looping runs); (3) require a completion checklist before Finish to prevent early stopping (~85% premature stops observed on Movie Rec); (4) on reaching the cap, fall back to a pure reasoning answer with self-consistency (ReAct -> CoT-SC gave the best HotpotQA EM, 35.1).",
+   "source_titles": [
+    "ReAct: Synergizing Reasoning and Acting in Language Models",
+    "An LLM Compiler for Parallel Function Calling",
+    "AgentBench: Evaluating LLMs as Agents"
+   ],
+   "when_to_use": "Sub-goals whose next step depends on observations (navigating a codebase, interactive debugging, exploratory data queries, web/UI tasks); as the leaf executor inside ADaPT-style recursion.",
+   "tradeoffs": "Grounding nearly eliminates hallucination (0% vs 56% for CoT) but raises reasoning errors (47% vs 16%) and is slow and token-heavy because the full history is resent every step; prone to loops and early stopping, which are the dominant agent failures (Task Limit Exceeded).",
+   "default_parameters": "Step cap 10-20 per sub-goal (ReAct used ~7 for HotpotQA and up to ~30-50 for ALFWorld-style environments); repeated-action threshold 2; one fallback to CoT-SC with k=5 on cap; temperature 0; truncate observations to a fixed token budget per step."
+  }
+ ],
+ "architecture_recommendations": [
+  "1. Expose one interface, many strategies. Define a Decomposer component with a single entry point decompose(task_prompt, context, config) -> Plan, where Plan is a typed DAG (nodes: id, kind in {llm, tool, retriever, recursive, verify, aggregate}, args with $ref placeholders, deps, success_criteria, budget). Implement strategies as plugins behind this interface: direct (no decomposition), plan-and-solve (zero-shot plan), least-to-most (sequential carry-forward), dag-planner (LLMCompiler/ReWOO style), adaptive-recursive (ADaPT/TDAG), search (ToT/GoT/RAP), and orchestrator-workers (Anthropic). A strategy selector picks per task using cheap signals: estimated step depth, presence of tools, independence of sub-goals, verifiability of intermediate states, and latency/cost SLOs.",
+  "2. Separate Planner, Scheduler, Executor, Verifier, Replanner as distinct modules with explicit state (plan, past_steps, evidence, reflections), following the LangGraph plan-and-execute / LLMCompiler decomposition. The Scheduler is pure code (no LLM): topological frontier scheduling with a concurrency limit, per-node timeout/retry, placeholder substitution and streaming start. The Replanner (joiner) is an LLM call bounded by max_replans (default 2-3).",
+  "3. Make plans machine-validated before execution. Use a strict JSON schema (HuggingGPT-style id/dep/args) with constrained decoding or a logit bias toward structural tokens, then run static checks: acyclicity, referenced ids exist, tool names and argument types match the registry, every task requirement maps to at least one node (coverage), and no node exceeds a per-step computation-depth bound (Faith and Fate). Invalid plans go to a repair prompt (one attempt) and then to a fallback strategy. Planning F1 for GPT-3.5 was only ~50% in HuggingGPT's evaluation; validation, not trust, is the design stance.",
+  "4. Decompose lazily by default and recursively on failure. Try the whole task with a bounded executor first; on externally confirmed failure, plan 3-5 sub-tasks with AND/OR composition and recurse to d_max=3 (ADaPT). After each completed sub-task, re-plan the remainder conditioned on results (TDAG) to prevent cascading failures. Gate decomposition on estimated depth (Least-to-Most gains appear at 5+ steps) so easy tasks cost one call.",
+  "5. Treat the LLM planner as a proposer and put correctness in verifiers. Every node declares success_criteria that an external check can evaluate: schema validation, unit tests, constraint/precondition checkers, retrieval grounding checks, numeric recomputation by tools, or a symbolic solver for formalizable domains (LLM-Modulo). Reflection/replanning is triggered only by these signals, never by the model re-reading its own output (Huang et al.). Backprompt with the verifier's error message for at most 3-5 rounds.",
+  "6. Use a registry of sub-task handlers (Decomposed Prompting) addressed by name with docstring-quality descriptions, examples, edge cases and poka-yoke parameter design (Anthropic ACI guidance). Handlers include LLM prompts (with per-handler exemplar sets), symbolic tools, retrievers, and the planner itself (recursion). Retrieve the top-k relevant handlers into the planner prompt when the catalog is large to respect context limits.",
+  "7. Route models by role: strongest available model for planning, verification synthesis and the joiner; smaller/cheaper models for leaf execution and extraction (ReWOO's 7B planner result and LangChain's cost guidance). Log every blueprint/plan with its outcome to build a distillation set for a small domain-specific planner.",
+  "8. Hard budgets everywhere: per-node step cap (10-20), per-plan node cap (e.g., 25), recursion depth cap (3-4), replan cap (2-3), reflection memory cap (1-3), wall-clock and token budgets with graceful degradation to a direct CoT-SC answer. Implement loop detection (repeated tool+args hash) and a completion checklist before Finish, since Task Limit Exceeded, Invalid Format and Invalid Action dominate agent failures (AgentBench, LLMCompiler).",
+  "9. Make parallelism a first-class plan property: the planner prompt instructs that independent sub-goals have no deps and dependent ones reference placeholders; the scheduler runs the frontier concurrently; self-consistency samples and candidate-plan voting are fanned out through the same parallel executor. Include a damping rule so trivial tasks are not decomposed or delegated (Anthropic subagent guidance).",
+  "10. Configuration surface for any domain: a DomainProfile object containing (a) planner exemplars and the PS+-style 'extract relevant variables' instruction tailored to the domain (e.g., part numbers, tolerances, requirement IDs, timestamps), (b) the handler/tool subset, (c) verifiers and success criteria, (d) decomposition heuristics (depth gate, base-case sizes, chunking rules), (e) budgets and SLOs, (f) output schema. Strategies read only from the profile, so swapping domains never touches code.",
+  "11. Observability and evaluation hooks at every chain boundary: persist plan, node inputs/outputs, verifier verdicts, reflections, timing and tokens; compute step-wise metrics (plan validity rate, sub-goal success rate, compositionality gap, replans per task) alongside end-to-end success, as the planning survey notes that final-success-only evaluation hides decomposition failures.",
+  "12. Human checkpoints and safety: expose an approval hook on nodes tagged irreversible or high-impact (writes to systems of record, destructive commands), default-on for engineering operations; run agents in sandboxes; keep plans human-readable so reviewers can approve or edit a plan before execution (visible planning steps per Anthropic)."
+ ],
+ "pitfalls": [
+  "Cascading failure from frozen up-front plans: an early sub-goal error propagates through the whole plan (planning survey: decomposition-first con; TDAG measured 34.78% of Plan-and-Execute errors as cascading vs 4.35% with dynamic re-decomposition). Mitigate with re-planning after each sub-goal, OR-alternatives, and verifier gates between nodes.",
+  "Static Plan-and-Execute can be worse than no planning on interactive tasks (ADaPT: WebShop 17.0 vs ReAct 32.0). Mitigate by lazy/as-needed decomposition and keeping an interleaved executor as the leaf.",
+  "Intrinsic self-correction degrades accuracy (Huang et al.: GPT-4 GSM8K 95.5 -> 89.0 after two rounds; GPT-3.5 CommonSenseQA 75.8 -> 38.1); reported Reflexion/RCI gains relied on oracle labels. Mitigate by triggering reflection only from external feedback and otherwise spending budget on self-consistency.",
+  "Unreliable self-reported success and self-generated tests: Reflexion's MBPP Python result fell (80.1 -> 77.1) with a 16.3% test false-positive rate; ADaPT's executor failure signal is a self-heuristic. Mitigate with independent verifiers (real test suites, schema checks) and treat self-judgment as a weak prior.",
+  "Looping and premature stopping in interleaved agents: ~10% of LLaMA-2 ReAct HotpotQA runs looped past 4 calls and ~85% of GPT-3.5 Movie Rec runs stopped early (LLMCompiler); Task Limit Exceeded is the dominant AgentBench failure. Mitigate with repeated-action detection, completion checklists, step caps and a reasoning fallback.",
+  "Format and action invalidity: AgentBench reports Invalid Format (~14%) and Invalid Action (~10%) as major failure classes; HuggingGPT cites output-format instability and planning F1 ~50%. Mitigate with JSON schemas, constrained decoding/logit bias, validation against the tool registry, and a bounded repair pass.",
+  "Compositionality gap that does not shrink with scale (~40%, Self-Ask): sub-goals correct but composition wrong. Mitigate by always re-asking the original question with sub-answers in context (Least-to-Most), adding an explicit composition/aggregation node, and tracking the gap as a metric.",
+  "Depth-driven decay (Faith and Fate): accuracy falls with computation-graph depth because models pattern-match subgraphs. Mitigate by bounding per-step depth and delegating exact computation to tools.",
+  "Autonomous plan infeasibility: GPT-4 produced valid Blocksworld plans only ~34% of the time and collapsed to 2-9% on obfuscated domains (Valmeekam et al.); the planning survey lists hallucinated entities/tools and precondition violations. Mitigate with external verifiers/backprompting (82% of failures fixed in ~3.7 rounds) or symbolic planners seeded by LLM plans.",
+  "Reasoning-error shift in grounded agents: ReAct cut hallucination to 0% but raised reasoning errors to 47% (vs 16% for CoT) and 23% search-result errors. Mitigate by combining modes (ReAct -> CoT-SC) and improving retrieval quality.",
+  "Cost blow-up of search and voting: ToT uses ~5x the completion tokens of CoT and CoT-SC k=100 is costly; GoT's advantage vanishes on small instances. Mitigate by gating search on task size/verifiability and keeping b, k and depth as configured budgets.",
+  "Over-decomposition and over-delegation: frontier models may spawn subagents or chain steps where a direct call suffices (Anthropic docs); extra reasoning overhead and context-length pressure cause plan forgetting on long trajectories (planning survey). Mitigate with a depth gate, damping instructions, and compact per-node context (ReWOO).",
+  "Context-length limits on tool catalogs (HuggingGPT): too many tool descriptions crowd the planner prompt. Mitigate by retrieving relevant handlers per task.",
+  "Semantic misunderstanding is not fixed by planning (Plan-and-Solve: 27% of errors unchanged). Mitigate with retrieval grounding, variable-extraction instructions, and clarification sub-goals.",
+  "Benchmark/evaluation blind spot: most benchmarks score only final success (planning survey), hiding plan-quality regressions. Mitigate with step-wise metrics and plan-validity tests."
+ ],
+ "evaluation_metrics": [
+  "End-to-end task success rate / exact match / F1 on multi-step benchmarks (GSM8K, HotpotQA, 2WikiMultiHopQA, MuSiQue, Bamboogle, DROP, ALFWorld, WebShop, TextCraft, AgentBench, ItineraryBench, Game of 24, Blocksworld/PlanBench) and on in-house engineering task suites",
+  "Compositionality gap: fraction of tasks where all sub-goals are correct but the composed answer is wrong (Self-Ask)",
+  "Plan validity rate: share of emitted plans passing schema, acyclicity, tool-existence, argument-type and coverage checks before any repair; repair success rate",
+  "Plan quality vs reference: precision/recall/F1 of predicted sub-tasks and edit distance of task order (HuggingGPT planning evaluation), plus GPT-4/LLM-judge score for graph plans",
+  "Sub-goal success rate and per-depth success curve (ADaPT analysis by d_max and problem depth); average decomposition depth actually used",
+  "Cascading-failure rate: fraction of failures attributable to an upstream sub-goal error (TDAG)",
+  "Failure-class distribution: Task Limit Exceeded, Invalid Format, Invalid Action, Context Limit Exceeded (AgentBench), plus loop-detection and premature-stop counts (LLMCompiler)",
+  "Efficiency: LLM calls per task, total tokens per task (ReWOO reports tokens; LLMCompiler reports cost multiples), wall-clock latency and speedup vs a sequential baseline, DAG parallelism ratio (critical path length / total nodes)",
+  "Cost per solved task in dollars and tokens (ToT reports cost per case), and accuracy-per-dollar Pareto curves across strategies",
+  "Verifier-loop metrics: fraction of failed plans repaired, average backprompt rounds to success (Valmeekam: 3.3-3.7), reflection trials to success (Reflexion), false-positive rate of success signals (Reflexion MBPP 16.3%)",
+  "Self-consistency agreement ratio distribution and calibration (agreement vs accuracy) used for routing",
+  "Robustness under tool failure (accuracy drop with tools returning no evidence, ReWOO) and under distribution shift in task length/complexity (SCAN length split, list-length generalization)",
+  "Human preference / pairwise win rate for open-ended outputs (ToT creative writing protocol) and rubric-based LLM-judge scores for Self-Refine loops",
+  "Operational: planner-call share of total cost, cache hit rate on sub-goals/plans, human-checkpoint invocation rate, time-to-first-executed-node when streaming plans"
+ ],
+ "engineering_adaptation_notes": [
+  "Code tasks: use orchestrator-workers / ADaPT recursion for multi-file changes (Anthropic names this the canonical case for dynamic decomposition); leaf executors are ReAct loops over repo tools; success criteria are compilers, linters and real test suites, not self-generated tests (Reflexion HumanEval 80 -> 91 with tests, MBPP down with weak tests); cap reflection trials at 3.",
+  "Specifications, requirements and standards documents: apply GoT-style split -> per-chunk extraction -> aggregate/merge DAGs for coverage and conflict detection (document-merging and keyword-counting templates); use Self-Ask-style sub-questions with a retriever attached per hop for clause lookups; include a 'variable extraction' step (PS+) for requirement IDs, units, tolerances and normative verbs (shall/should).",
+  "Test logs and incident reports: decomposition-first DAG planning shines because sub-queries (per shard, per service, per time window) are independent and parallelizable (LLMCompiler 1.8-3.7x latency gains); add symbolic handlers (regex, SQL, statistics) to keep per-step computation depth low (Faith and Fate), and a verifier node that recomputes any numeric claim with a tool.",
+  "CAD/BOM metadata: treat structural checks (part-of hierarchy, quantity roll-ups, mass/cost sums, interface compatibility) as symbolic verifier handlers; the LLM planner proposes the plan and a solver or rules engine owns correctness (LLM-Modulo, Valmeekam et al.); use MCTS/RAP-style search only for ordering/configuration problems where a heuristic reward (constraints satisfied) exists.",
+  "Planning and scheduling tasks (test campaigns, assembly sequences, change rollouts): seed a symbolic planner/scheduler with the LLM plan (LPG search steps 15.8 -> 8.9 with GPT-4 seeds) and backprompt with verifier errors for up to 5 rounds.",
+  "Domain profiles: encode domain exemplars for the decomposer (the biggest lever in few-shot decomposition), a tool/handler subset, success criteria per node type, chunking/base-case sizes (e.g., one requirement section, one log window), and output schemas; the same engine then serves safety analyses, FMEA drafting, root-cause analysis, compliance mapping, etc.",
+  "Human-in-the-loop placement: engineering outputs often feed systems of record (requirements databases, PLM, ticketing); tag nodes that write or recommend irreversible actions for approval and surface the plan for review before execution, which also provides the external feedback the reflection loop needs.",
+  "Model selection: pick planner models using agentic benchmarks (AgentBench shows a large gap between frontier API models and <=70B open models); if open-source executors are required, add stronger validation, loop detection and smaller step caps; distill domain planners from logged blueprints (ReWOO 7B planner parity)."
+ ],
+ "composition_notes": [
+  "Hybrid retrieval: decomposition produces retrieval-sized sub-questions; attaching retrieval per sub-question (Self-Ask + Search: 2WikiMultiHopQA 30.0 -> 40.1; Decomposed Prompting's symbolic retrieval handler) outperforms retrieving on the original query. Retrieval also feeds the planner with relevant tool/handler descriptions and past plans, and retrieval hits are a grounding signal the verifier can use to reject hallucinated sub-goals.",
+  "Answer verification: verification is the external feedback that makes reflection/replanning work (Reflexion, LLM-Modulo backprompting) and is unsafe to omit (Huang et al.). Compose as verify nodes in the DAG after each sub-goal and after the final aggregation; use the compositionality gap and plan-validity checks as verification targets; share self-consistency sampling between the two components (agreement ratio as confidence).",
+  "Parallelization: the plan DAG is the parallelization component's input; the scheduler runs the ready frontier concurrently (LLMCompiler 3.7x latency / 6.7x cost), fans out self-consistency and candidate-plan samples (voting), runs ToT/GoT candidates per level in parallel, and executes TDAG sub-agents concurrently when independent. The planner prompt must mark independence explicitly; the parallel component enforces concurrency limits and rate limits.",
+  "Caching: cache (a) plans/blueprints keyed by normalized task + domain profile (ReWOO blueprints are observation-free and therefore highly reusable), (b) sub-goal results keyed by handler + canonical args (deterministic DAG nodes are natural cache keys), (c) successful sub-task solutions as skills retrieved by similarity (TDAG incremental skill library), and (d) verifier outcomes. Lazy decomposition plus caching means repeated tasks skip planning entirely; stream cache hits into the frontier so dependents start immediately.",
+  "Pipeline RAG: decomposition is the control plane of a pipeline RAG system: it decides which sub-questions need retrieval, which need generation, which need tools, and how results merge (GoT aggregate nodes). The retrieve -> generate -> verify chain per sub-question is itself a prompt chain; the final synthesis node is the ReWOO Solver / LLMCompiler joiner. Multi-hop RAG benchmarks (HotpotQA, MuSiQue, 2Wiki) are the shared evaluation surface.",
+  "Prompting and architecture best practices: follow the simplest-structure-first ladder (direct call -> prompt chaining -> routing -> parallel sectioning/voting -> orchestrator-workers -> evaluator-optimizer -> agent) from Anthropic; keep reasoning before answers (CoT), make plans visible and separately logged (chain boundaries), write handler/tool descriptions like docstrings with poka-yoke parameters, add damping rules against over-delegation, and enforce iteration caps and human checkpoints. Decomposition then becomes the shared skeleton onto which the other five components attach at node boundaries."
+ ],
+ "_status": "DRAFT: pre-critique, pre-verification. Replaced by verified dossier when the research workflow completes."
+}

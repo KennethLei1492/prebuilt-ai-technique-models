@@ -1,0 +1,696 @@
+{
+ "concept": "Hybrid Retrieval (sparse + dense + reranking + fusion)",
+ "summary": "Hybrid retrieval is the practice of running two or more complementary first-stage retrievers (lexical BM25, learned-sparse SPLADE, single-vector dense bi-encoders such as DPR/Contriever/E5/BGE/GTE, and multi-vector late-interaction ColBERTv2/PLAID) over the same corpus, fusing their candidate lists (Reciprocal Rank Fusion or a normalized convex combination of scores), and then re-scoring a shallow top-k with a more expensive reranker (cross-encoder / monoT5, or a listwise LLM reranker such as RankGPT or RankZephyr). The literature is unusually consistent on why this works: BM25 is a robust zero-shot baseline that single-vector dense models frequently fail to beat out of domain (BEIR, Thakur et al. 2021: DPR averaged -47.7% vs BM25 across 18 datasets while BM25+cross-encoder reranking gained +11%), dense models win in-domain and on vocabulary-mismatch queries (DPR: +9-19 points top-20 accuracy over BM25), and the two signals have low error correlation, so fusion is nearly free lift (Ma et al. 2021 replication: NQ top-20 79.5 dense alone vs 82.7 hybrid; Anthropic contextual retrieval: adding BM25 to embeddings cut top-20 retrieval failures from 3.7% to 2.9%, and reranking cut them further to 1.9%). Rerankers are the single largest quality lever (BM25+CE was best on 16/18 BEIR datasets; GPT-4 listwise reranking reached nDCG@10 75.59 on TREC DL19 vs 50.58 for BM25), but at 20-30x the latency of a dense retriever, so the production pattern is a recall-oriented wide first stage, a fused candidate pool of ~100-1000, and a precision-oriented rerank down to 5-20 passages.\n\nThe 2022-2024 literature refines the defaults. Bruch, Gai & Ingber (ACM TOIS 2023) show RRF's k=60 is a reasonable zero-config default but that tuned RRF constants do not transfer across domains, while a convex combination with theoretical min-max normalization and alpha in [0.6, 0.8] beats RRF on every dataset tested and converges with <5% of training queries; ColBERTv2+PLAID make late interaction production-viable (6-10x smaller indexes, 7x GPU / 45x CPU latency reduction); SPLADE++ matches or beats dense models on BEIR (50.5-50.7 vs ColBERTv2 49.7) while living in an inverted index; LLM query expansion (HyDE, Query2doc) adds 10-15 nDCG points to BM25 on TREC DL but costs >2 s per query and tens of thousands of dollars at scale, so it belongs behind a cache and a router; and chunk-level context enrichment (Anthropic contextual retrieval, Doc2Query--) is a one-time indexing cost that pays back on every query. Evaluation should follow BEIR/MTEB conventions (nDCG@10 for ranking quality, Recall@100/1000 for first-stage headroom, MRR@10 for single-answer tasks) and be run on an in-domain golden set, because MTEB's own finding is that no single embedding model dominates across tasks.",
+ "papers": [
+  {
+   "title": "The Probabilistic Relevance Framework: BM25 and Beyond",
+   "authors": "Stephen Robertson, Hugo Zaragoza",
+   "year": 2009,
+   "venue": "Foundations and Trends in Information Retrieval, Vol. 3, No. 4, pp. 333-389",
+   "url": "https://nowpublishers.com/article/Details/INR-019",
+   "arxiv_id": "",
+   "citation_signal": "Semantic Scholar reports 6,517 citations; the canonical reference for BM25, which every open-source engine (Lucene/Elasticsearch/OpenSearch, Anserini/Pyserini, Vespa) implements as its default lexical scorer.",
+   "key_contribution": "Gives the full derivation of the Probabilistic Relevance Framework: the binary independence model, relevance-feedback models, the eliteness/2-Poisson model that yields BM25's saturating term-frequency component (controlled by k1) and length normalization (controlled by b), and BM25F for multi-field documents with per-field weights. It also compares PRF to language models and divergence-from-randomness and has a dedicated chapter on parameter optimisation of k1 and b.",
+   "design_implication": "BM25 must remain a first-class retriever in any hybrid stack, not a fallback: it is cheap (20 ms CPU per query on 1M docs in BEIR), needs no GPU, and handles exact identifiers (part numbers, error codes, requirement IDs) that embeddings blur. Use BM25F-style field weighting for engineering documents with structured fields (title, section heading, body, tags), and treat k1/b as tunable on an in-domain validation set rather than fixed constants."
+  },
+  {
+   "title": "Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods",
+   "authors": "Gordon V. Cormack, Charles L. A. Clarke, Stefan Büttcher",
+   "year": 2009,
+   "venue": "SIGIR 2009 (short paper), pp. 758-759, DOI 10.1145/1571941.1572114",
+   "url": "https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf",
+   "arxiv_id": "",
+   "citation_signal": "Semantic Scholar reports 1,438 citations; Paper Digest ranks it the No. 2 most influential SIGIR 2009 paper; RRF is the default fusion method in Elasticsearch's rrf retriever, Weaviate's rankedFusion, Azure AI Search, Vespa, PyTerrier and most RAG frameworks.",
+   "key_contribution": "Proposes an unsupervised rank-only fusion: score(d) = sum over input rankings of 1/(k + rank(d)), with k = 60 fixed in a pilot and never changed during validation. On TREC runs and the LETOR 3 learning-to-rank dataset, RRF consistently equalled or beat each individual system and the established meta-ranking baselines Condorcet Fuse and CombMNZ.",
+   "design_implication": "RRF is the correct zero-configuration default when fusing retrievers whose scores live on incomparable scales (BM25 raw scores vs cosine similarities vs SPLADE dot products): it needs no normalization, no training data, and degrades gracefully. Implement it over the union of the top-N lists (N at least equal to the requested result size, typically 100-1000) and expose k as a parameter but default it to 60."
+  },
+  {
+   "title": "An Analysis of Fusion Functions for Hybrid Retrieval",
+   "authors": "Sebastian Bruch, Siyu Gai, Amir Ingber",
+   "year": 2023,
+   "venue": "ACM Transactions on Information Systems (DOI 10.1145/3596512); arXiv Oct 2022",
+   "url": "https://arxiv.org/abs/2210.11934",
+   "arxiv_id": "2210.11934",
+   "citation_signal": "OpenAlex reports 62 citations; published in ACM TOIS (top IR journal); authored at Pinecone and used to justify score-based fusion in Pinecone, Weaviate (relativeScoreFusion default since v1.24) and Elasticsearch's linear retriever.",
+   "key_contribution": "Systematically compares convex combination (CC) of lexical and semantic scores against RRF across MS MARCO and BEIR datasets (nDCG@1000 / Recall@1000). Findings: (1) RRF is sensitive to its constant: on MS MARCO, per-retriever constants (10, 4) gave nDCG 0.451 vs 0.425 for (60, 60), but the same tuned constants dropped HotpotQA from 0.675 to 0.621, so tuned RRF does not transfer; (2) learned CC is largely insensitive to the normalization scheme (min-max, z-score, theoretical min-max are near rank-equivalent with a shifted alpha), and theoretical min-max (TM2C2) is most stable; (3) CC with alpha = 0.8 beat RRF on every dataset, e.g. MS MARCO 0.454 vs 0.425, NQ 0.542 vs 0.514, FiQA 0.496 vs 0.464, HotpotQA 0.699 vs 0.675; (4) alpha converges with fewer than 5% of training queries, and alpha in [0.6, 0.8] consistently helped.",
+   "design_implication": "Ship both fusion functions behind one interface. Default to RRF (k=60) when the deployment has no labelled queries; switch to convex combination with theoretical min-max normalization and alpha ~0.7 (semantic weight) once a few dozen judged queries exist, and re-fit alpha per domain/collection rather than globally. Never tune RRF's k on one collection and reuse it on another."
+  },
+  {
+   "title": "Dense Passage Retrieval for Open-Domain Question Answering",
+   "authors": "Vladimir Karpukhin, Barlas Oguz, Sewon Min, Patrick Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, Wen-tau Yih",
+   "year": 2020,
+   "venue": "EMNLP 2020",
+   "url": "https://arxiv.org/abs/2004.04906",
+   "arxiv_id": "2004.04906",
+   "citation_signal": "Semantic Scholar reports 7,274 citations; the reference architecture for bi-encoder dense retrieval and the retriever inside the original RAG paper.",
+   "key_contribution": "Two independent BERT-base encoders trained with in-batch negatives (batch 128) plus one BM25 hard negative per question; Wikipedia split into 21M disjoint 100-word passages each prefixed with its article title; FAISS HNSW index (512 neighbours, construction depth 200, search depth 128). Top-20 accuracy on NQ rose from 59.1 (BM25) to 78.4-79.4 (DPR), and 9-19 points absolute across datasets. A hybrid that reranks the union of top-2000 from each retriever with BM25(q,p) + 1.1*sim(q,p) gave 76.6-78.0 on NQ (no gain) but 79.8-79.9 on TriviaQA (small gain). DPR served ~995 queries/s on GPU vs ~23.7 q/s per CPU thread for BM25; encoding 21M passages took 8.8 GPU-hours x 8 and index build 8.5 hours.",
+   "design_implication": "Establishes the production template: fixed-size passages with document-title prefixes, hard-negative training, HNSW ANN. Its hybrid result also carries a warning repeated by Ma et al. 2021: a naive linear fusion with an untuned weight or an under-tuned BM25 baseline can show no gain, so fusion weights must be fitted on a dev set and BM25 must be properly configured before you conclude hybrid does not help."
+  },
+  {
+   "title": "A Replication Study of Dense Passage Retriever",
+   "authors": "Xueguang Ma, Kai Sun, Ronak Pradeep, Jimmy Lin",
+   "year": 2021,
+   "venue": "arXiv preprint (Pyserini/PyGaggle reproduction)",
+   "url": "https://arxiv.org/abs/2104.05740",
+   "arxiv_id": "2104.05740",
+   "citation_signal": "OpenAlex reports 26 citations; from the Waterloo group that maintains Anserini/Pyserini; the standard citation for the finding that DPR under-reported BM25 and the hybrid gain.",
+   "key_contribution": "Independently reproduces DPR with the original checkpoints and shows the original BM25 baseline was under-tuned: NQ top-20 BM25 is 62.9 (vs 59.1 reported) and top-100 78.3 (vs 73.7). With a properly tuned fusion, hybrid clearly beats dense alone: NQ top-20 82.6-82.7 and top-100 88.1-88.6 vs 79.5 / 86.1 for DPR. Fusion was sim(q,p) + alpha*BM25(q,p) with alpha chosen by grid search over [0, 2] in steps of 0.05 on the NQ dev set (alpha = 0.55 on raw scores, 1.30 when normalized), fusing top-1000 from each retriever.",
+   "design_implication": "Hybrid gains of +3 points top-20 recall are real but only appear when (a) BM25 is tuned, (b) the fusion weight is grid-searched on held-out queries, and (c) a deep enough candidate pool (k' = 1000) is fused. Build the weight search into the component's calibration step and log the BM25 baseline alongside every hybrid number."
+  },
+  {
+   "title": "Sparse, Dense, and Attentional Representations for Text Retrieval",
+   "authors": "Yi Luan, Jacob Eisenstein, Kristina Toutanova, Michael Collins",
+   "year": 2021,
+   "venue": "Transactions of the Association for Computational Linguistics (TACL)",
+   "url": "https://arxiv.org/abs/2005.00181",
+   "arxiv_id": "2005.00181",
+   "citation_signal": "TACL (top-tier journal); the theoretical foundation cited for why single-vector embeddings struggle on long documents and why multi-vector and hybrid models exist.",
+   "key_contribution": "Proves that the embedding dimension a dual encoder needs for exact retrieval grows with document length and inversely with the normalized score margin (for Boolean inner product, k >= 24*L_Q*L_D*ln(4/beta)); empirically, normalized margins shrink to 6.8e-6 for BM25 on long documents vs 0.0169 for Boolean matching. Proposes ME-BERT (m = 8 vectors per document, max inner product) and a sparse-dense hybrid with a single learned weight lambda tuned on dev data. On NQ at 100-word passages, hybrid reached Recall@400-tokens 49.5 vs 43.3 for ME-BERT-768 and 35.7 for BM25; on MS MARCO dev the hybrid improved MRR to 0.338 (passage) / 0.346 (document).",
+   "design_implication": "Justifies three production rules: keep passages short (a few hundred tokens) for single-vector indexes; use multi-vector (ColBERT-style) or learned-sparse representations when documents are long or precise term matching matters (specifications, standards clauses); and always keep a lexical channel in the fusion because dense capacity is fundamentally bounded."
+  },
+  {
+   "title": "ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT",
+   "authors": "Omar Khattab, Matei Zaharia",
+   "year": 2020,
+   "venue": "SIGIR 2020",
+   "url": "https://arxiv.org/abs/2004.12832",
+   "arxiv_id": "2004.12832",
+   "citation_signal": "Semantic Scholar reports 2,634 citations; Paper Digest 'Most Influential SIGIR 2020 Paper'; basis of the Stanford ColBERT, RAGatouille, PyLate and Vespa/Jina multi-vector ecosystems.",
+   "key_contribution": "Encodes queries and passages independently into per-token 128-dim vectors and scores with MaxSim (sum over query tokens of the max cosine to any document token). Queries are padded to 32 tokens with [Q] marker and [MASK] augmentation. Re-ranking BM25 top-1000 on MS MARCO dev: 34.9 MRR@10 in 61 ms / 7 GFLOPs vs 36.0 in 10,700 ms / 97 TFLOPs for a retrained BERT-base cross-encoder (170x faster, ~14,000x fewer FLOPs). End-to-end retrieval: 36.0 MRR@10, Recall@1000 96.8, 458 ms latency vs 18.7 MRR@10 for BM25. Cost: 154 GiB index for 8.8M passages at 128-dim/2-byte.",
+   "design_implication": "Late interaction is a middle tier between bi-encoders and cross-encoders: use it as a high-recall first stage or a cheap reranker when cross-encoder latency is unaffordable. The raw ColBERT index footprint (tens to hundreds of GiB) is the reason ColBERTv2/PLAID are required for production."
+  },
+  {
+   "title": "ColBERTv2: Effective and Efficient Retrieval via Lightweight Late Interaction",
+   "authors": "Keshav Santhanam, Omar Khattab, Jon Saad-Falcon, Christopher Potts, Matei Zaharia",
+   "year": 2022,
+   "venue": "NAACL 2022",
+   "url": "https://arxiv.org/abs/2112.01488",
+   "arxiv_id": "2112.01488",
+   "citation_signal": "OpenAlex reports 345 citations (Semantic Scholar higher); NAACL main; introduced the LoTTE out-of-domain benchmark; the ColBERTv2 checkpoint is the de facto late-interaction model in production libraries.",
+   "key_contribution": "Residual compression (store a 4-byte centroid id plus 1- or 2-bit residuals, 20-36 bytes/vector vs 256) plus denoised cross-encoder distillation supervision. MS MARCO dev MRR@10 39.7 (vs 36.0 ColBERT, 36.8 SPLADEv2); Recall@1000 98.4. Index shrinks from 154 GiB to 16-25 GiB (6-10x). On LoTTE pooled Success@5: 71.6 (search) / 63.4 (forum) vs 68.9/60.1 SPLADEv2 and 48.3/47.2 BM25. Centroid count is the nearest power of two above 16*sqrt(#embeddings).",
+   "design_implication": "Makes multi-vector retrieval deployable on a single node for corpora of tens of millions of passages. Default to 2-bit residuals; budget ~36 bytes per token embedding when sizing storage; use ColBERTv2 for domains where term-level matching inside long technical passages matters (specifications, logs, code)."
+  },
+  {
+   "title": "PLAID: An Efficient Engine for Late Interaction Retrieval",
+   "authors": "Keshav Santhanam, Omar Khattab, Christopher Potts, Matei Zaharia",
+   "year": 2022,
+   "venue": "CIKM 2022 (DOI 10.1145/3511808.3557325)",
+   "url": "https://arxiv.org/abs/2205.09707",
+   "arxiv_id": "2205.09707",
+   "citation_signal": "CIKM full paper; the serving engine shipped inside the official ColBERT repository and reimplemented in PyLate; cited as the latency reference for multi-vector search.",
+   "key_contribution": "Represents passages as bags of centroids, uses centroid interaction to prune candidates before residual decompression, and centroid pruning to sparsify. Reduces ColBERTv2 latency up to 7x on GPU and 45x on CPU with no quality loss; tens of milliseconds on GPU and tens to a few hundred ms on CPU even at 140M passages.",
+   "design_implication": "If you adopt ColBERTv2, serve it through PLAID (or an equivalent centroid-pruning engine), expose ndocs/ncells/centroid_score_threshold as latency knobs, and expect CPU-only serving to be feasible for mid-size corpora, which matters for on-prem engineering deployments."
+  },
+  {
+   "title": "SPLADE: Sparse Lexical and Expansion Model for First Stage Ranking",
+   "authors": "Thibault Formal, Benjamin Piwowarski, Stéphane Clinchant",
+   "year": 2021,
+   "venue": "SIGIR 2021 (short paper)",
+   "url": "https://arxiv.org/abs/2107.05720",
+   "arxiv_id": "2107.05720",
+   "citation_signal": "Semantic Scholar reports 709 citations; SIGIR; SPLADE models are natively supported by Elasticsearch (ELSER is a learned-sparse model of the same family), OpenSearch neural sparse, Pinecone and Vespa.",
+   "key_contribution": "Uses BERT's MLM head to predict a weight for each of the 30,522 WordPiece vocabulary terms, applies log(1+ReLU(w)) saturation, and a FLOPS regularizer (sum over vocabulary of squared mean activation) with lambda in [1e-4, 1e-1] ramped quadratically to step 50k, with separate (stronger) lambda for queries. MS MARCO dev: MRR@10 0.322 / R@1000 0.955 vs BM25 0.184/0.853, doc2query-T5 0.277/0.947, ANCE 0.330/0.959. At an aggressive FLOPS = 0.05 the model keeps MRR@10 0.296 with ~18 non-zero terms per document and ~6 per query.",
+   "design_implication": "Learned sparse gives dense-level effectiveness with inverted-index infrastructure, built-in vocabulary expansion (handles synonyms BM25 misses) and interpretable term weights. It is the best single replacement for BM25 when you want to keep one index type; pair with BM25 or dense for hybrid, and use the FLOPS lambda as the latency/quality dial."
+  },
+  {
+   "title": "From Distillation to Hard Negative Sampling: Making Sparse Neural IR Models More Effective (SPLADE++)",
+   "authors": "Thibault Formal, Carlos Lassance, Benjamin Piwowarski, Stéphane Clinchant",
+   "year": 2022,
+   "venue": "SIGIR 2022 (short paper); extension of SPLADE v2 (arXiv 2109.10086)",
+   "url": "https://arxiv.org/abs/2205.04733",
+   "arxiv_id": "2205.04733",
+   "citation_signal": "SIGIR; the SPLADE++ CoCondenser-EnsembleDistil checkpoint is the standard strong learned-sparse first stage used by RankZephyr/RankVicuna and the Waterloo reranking papers.",
+   "key_contribution": "Applies dense-retrieval training tricks (cross-encoder distillation, hard-negative mining, CoCondenser initialization) to SPLADE. MS MARCO dev MRR@10 38.0 / R@1000 98.2 (CoCondenser-EnsembleDistil). On a 13-dataset BEIR subset: 50.5-50.7 mean nDCG@10 vs 43.7 BM25 and 49.7 ColBERTv2. SPLADE v2 (2021) had already reported >9% nDCG@10 gain on TREC DL19 over SPLADE v1.",
+   "design_implication": "SPLADE++ is a drop-in first stage that beats BM25 by ~7 nDCG points zero-shot and is competitive with the best late-interaction model, at inverted-index cost. In the component, offer it as the 'sparse' channel alternative to BM25 (or alongside it) and use SPLADE++ ED as the default first stage feeding LLM rerankers, as RankZephyr does."
+  },
+  {
+   "title": "BEIR: A Heterogenous Benchmark for Zero-shot Evaluation of Information Retrieval Models",
+   "authors": "Nandan Thakur, Nils Reimers, Andreas Rücklé, Abhishek Srivastava, Iryna Gurevych",
+   "year": 2021,
+   "venue": "NeurIPS 2021 Datasets and Benchmarks Track",
+   "url": "https://arxiv.org/abs/2104.08663",
+   "arxiv_id": "2104.08663",
+   "citation_signal": "NeurIPS D&B; the universal zero-shot retrieval benchmark (18 datasets) embedded in MTEB's retrieval section and reported by every retriever paper since 2021.",
+   "key_contribution": "Evaluates 10 systems across 18 datasets zero-shot. BM25 average nDCG@10 0.423 is a strong baseline: relative to BM25, BM25+CE reranking +11% (best on 16/18 datasets), ColBERT +2.5% (9/18), docT5query +1.6%, TAS-B -2.8%, GenQ -3.6%, ANCE -7.4%, DPR -47.7% (1/18). Efficiency on 1M DBPedia docs: BM25 20 ms CPU / 0.4 GB index; dense retrievers 14-20 ms GPU, 125-275 ms CPU, 3 GB; BM25+CE 450 ms GPU / 6,100 ms CPU; ColBERT 350 ms GPU / 20 GB. Reranking and late interaction generalize best but cost most; dense retrievers are 20-30x faster than rerankers.",
+   "design_implication": "Never deploy a dense-only retriever on an unseen domain without a lexical channel and an in-domain evaluation; the expected failure mode is under-performing BM25. Budget the pipeline as a cascade: cheap wide first stage(s), fusion, then reranking of a bounded candidate set, because reranking is where the generalizable quality lives and where the latency goes."
+  },
+  {
+   "title": "MTEB: Massive Text Embedding Benchmark",
+   "authors": "Niklas Muennighoff, Nouamane Tazi, Loïc Magne, Nils Reimers",
+   "year": 2023,
+   "venue": "EACL 2023 (arXiv Oct 2022)",
+   "url": "https://arxiv.org/abs/2210.07316",
+   "arxiv_id": "2210.07316",
+   "citation_signal": "Semantic Scholar reports 1,109 citations; the public Hugging Face MTEB leaderboard is the de facto model-selection tool for embeddings in industry.",
+   "key_contribution": "8 task types, 58 datasets, 112 languages, 33 models evaluated. Core finding: no single embedding method dominates across all tasks, so leaderboard-average rank is not a reliable proxy for performance on a specific task (e.g. retrieval vs clustering).",
+   "design_implication": "Use MTEB's retrieval subset (BEIR) to shortlist embedding models, but make the embedding model a configuration parameter and select it by an in-domain evaluation set; expect to swap models over time without re-architecting (keep a versioned embedding registry and re-embed asynchronously)."
+  },
+  {
+   "title": "Unsupervised Dense Information Retrieval with Contrastive Learning (Contriever)",
+   "authors": "Gautier Izacard, Mathilde Caron, Lucas Hosseini, Sebastian Riedel, Piotr Bojanowski, Armand Joulin, Edouard Grave",
+   "year": 2022,
+   "venue": "Transactions on Machine Learning Research (TMLR) 2022",
+   "url": "https://arxiv.org/abs/2112.09118",
+   "arxiv_id": "2112.09118",
+   "citation_signal": "Semantic Scholar reports 1,773 citations; TMLR; Contriever is the unsupervised baseline/backbone used by HyDE, Dense X Retrieval and many RAG papers.",
+   "key_contribution": "Trains a BERT-base bi-encoder with no labels via independent random cropping (spans 5-50% of 256 tokens, 10% token deletion), MoCo queue of 131,072 negatives, momentum 0.9995, temperature 0.05, batch 2,048, 500k steps. Unsupervised Contriever beats BM25 on Recall@100 on 11/15 BEIR datasets (avg 60.1 vs 63.6 overall) but trails on nDCG@10 (36.0 vs 41.7). After MS MARCO fine-tuning: nDCG@10 47.5 vs BM25 44.0, and 51.2 with a cross-encoder reranker; Recall@100 67.1.",
+   "design_implication": "Unsupervised dense retrieval is a recall engine, not a ranking engine: it is good at putting the right document somewhere in the top-100 but worse than BM25 at ranking it first. That is exactly the profile that benefits from fusion with BM25 and from a downstream reranker, and it argues for deep candidate pools (k >= 100) before reranking."
+  },
+  {
+   "title": "Text Embeddings by Weakly-Supervised Contrastive Pre-training (E5)",
+   "authors": "Liang Wang, Nan Yang, Xiaolong Huang, Binxing Jiao, Linjun Yang, Daxin Jiang, Rangan Majumder, Furu Wei",
+   "year": 2022,
+   "venue": "arXiv preprint (Microsoft)",
+   "url": "https://arxiv.org/abs/2212.03533",
+   "arxiv_id": "2212.03533",
+   "citation_signal": "Semantic Scholar reports 1,739 citations; the E5 family (e5-base/large-v2, multilingual-e5) is among the most downloaded open embedding models and introduced the 'query:'/'passage:' prefix convention.",
+   "key_contribution": "Contrastive pre-training on CCPairs (1.3B pairs filtered to ~270M by consistency filtering) with batch size 32,768, then supervised fine-tuning. Asymmetric prefixes 'query: ' and 'passage: ' are added to inputs. BEIR (15 datasets) nDCG@10: pre-trained-only E5-base 42.9 and E5-large 44.2 beat BM25 41.7 without labels; fine-tuned 46.0/48.7/50.0 (small/base/large, 33M/110M/330M params). MTEB average 58.8/60.3/61.3, outperforming models with 40x more parameters.",
+   "design_implication": "Prefix handling must be part of the embedding adapter: the component should know, per model, which instruction/prefix to prepend to queries vs documents, because omitting it measurably hurts retrieval. E5-base-sized models (110M) are a sensible default for CPU/GPU-constrained deployments; larger only when evaluation shows gains."
+  },
+  {
+   "title": "C-Pack: Packed Resources For General Chinese Embeddings (BGE)",
+   "authors": "Shitao Xiao, Zheng Liu, Peitian Zhang, Niklas Muennighoff, Defu Lian, Jian-Yun Nie",
+   "year": 2024,
+   "venue": "SIGIR 2024 (arXiv Sept 2023)",
+   "url": "https://arxiv.org/abs/2309.07597",
+   "arxiv_id": "2309.07597",
+   "citation_signal": "OpenAlex reports 408 (2024) + 75 (2023) citations; SIGIR; the BGE family (bge-*-en-v1.5, bge-m3, bge-reranker) is one of the most widely deployed open embedding/reranker stacks.",
+   "key_contribution": "Three-stage recipe: RetroMAE masked auto-encoding pre-training, large-batch (up to 19,200) contrastive pre-training with in-batch negatives, then instruction-based fine-tuning with one ANN-mined hard negative per pair and a task instruction on the query side. English models reach MTEB averages 62.17/63.55/64.23 (small/base/large) with retrieval sub-scores 51.68/53.25/54.29; Chinese bge-large-zh 63.96 on C-MTEB vs 58.84 for the best prior model.",
+   "design_implication": "Confirms the modern embedding training recipe (large batch, hard negatives, query-side instructions) and that domain adaptation is feasible with modest labelled data: the component should support fine-tuning the embedding model on in-domain (query, positive, hard-negative) triples mined from its own BM25/dense logs."
+  },
+  {
+   "title": "Towards General Text Embeddings with Multi-stage Contrastive Learning (GTE)",
+   "authors": "Zehan Li, Xin Zhang, Yanzhao Zhang, Dingkun Long, Pengjun Xie, Meishan Zhang",
+   "year": 2023,
+   "venue": "arXiv preprint (Alibaba)",
+   "url": "https://arxiv.org/abs/2308.03281",
+   "arxiv_id": "2308.03281",
+   "citation_signal": "Semantic Scholar reports 1,059 citations; gte-base/large and the later gte-Qwen models are top MTEB entries with wide adoption.",
+   "key_contribution": "Multi-stage contrastive training over a diverse multi-source mixture; the 110M-parameter base model outperforms OpenAI's embedding API and models 10x larger on MTEB. Notably, without any code-specific fine-tuning it beats prior code retrievers of similar size by treating code as text.",
+   "design_implication": "For engineering corpora that mix prose and code (design docs with snippets, test logs, config files), a general text embedder trained on diverse data is a reasonable single-index default; validate on CoIR/CodeSearchNet-style tasks before adding a dedicated code embedding model."
+  },
+  {
+   "title": "Passage Re-ranking with BERT (monoBERT)",
+   "authors": "Rodrigo Nogueira, Kyunghyun Cho",
+   "year": 2019,
+   "venue": "arXiv preprint",
+   "url": "https://arxiv.org/abs/1901.04085",
+   "arxiv_id": "1901.04085",
+   "citation_signal": "Foundational cross-encoder reranking paper (thousands of citations in the IR literature; first on the MS MARCO passage leaderboard at release).",
+   "key_contribution": "Feeds query and passage jointly into BERT and uses the [CLS] relevance probability to rerank BM25 candidates; improved MS MARCO MRR@10 by 27% relative over the prior state of the art and set SOTA on TREC-CAR.",
+   "design_implication": "Defines the 'retrieve-then-rerank' cascade and the cross-encoder interface the component should expose: score(query, passage) -> float, applied to a bounded top-k. Modern successors (monoT5, bge-reranker, Cohere Rerank, MiniLM cross-encoders) keep the same contract."
+  },
+  {
+   "title": "Document Ranking with a Pretrained Sequence-to-Sequence Model (monoT5)",
+   "authors": "Rodrigo Nogueira, Zhiying Jiang, Ronak Pradeep, Jimmy Lin",
+   "year": 2020,
+   "venue": "Findings of EMNLP 2020 (2020.findings-emnlp.63)",
+   "url": "https://arxiv.org/abs/2003.06713",
+   "arxiv_id": "2003.06713",
+   "citation_signal": "Findings of EMNLP; monoT5-3B was the standard strong supervised reranker baseline that RankGPT and RankZephyr compare against; shipped in PyGaggle and used as the BEIR cross-encoder reference.",
+   "key_contribution": "Prompts T5 with 'Query: q Document: d Relevant:' and ranks by softmax over the logits of 'true' vs 'false' only (raw logits or full-vocabulary softmax fail). MS MARCO dev MRR@10: T5-base 0.363, T5-large 0.383, T5-3B 0.382 vs monoBERT-large 0.372 and BM25 0.184. Zero-shot on Robust04 (trained only on MS MARCO): BM25+T5-3B nDCG@20 0.596 vs BM25 0.424 and vs in-domain-tuned Birch 0.532. In low-data regimes T5-base reached 0.238 with 2k examples vs 0.127 for BERT-base, and ~45% of its full gain with 4% of the data.",
+   "design_implication": "Seq2seq/LLM-based pointwise rerankers transfer zero-shot and are sample-efficient to fine-tune, so a monoT5-style reranker is the right default when you have little in-domain labelled data. The 'true/false token-logit' trick is the template for building a calibrated pointwise reranker from any instruction-tuned LLM."
+  },
+  {
+   "title": "Is ChatGPT Good at Search? Investigating Large Language Models as Re-Ranking Agents (RankGPT)",
+   "authors": "Weiwei Sun, Lingyong Yan, Xinyu Ma, Shuaiqiang Wang, Pengjie Ren, Zhumin Chen, Dawei Yin, Zhaochun Ren",
+   "year": 2023,
+   "venue": "EMNLP 2023 (Outstanding Paper Award)",
+   "url": "https://arxiv.org/abs/2304.09542",
+   "arxiv_id": "2304.09542",
+   "citation_signal": "EMNLP 2023 Outstanding Paper Award (confirmed in the project README); third-party trackers list ~350 citations; implemented in LlamaIndex and the Waterloo rank_llm toolkit.",
+   "key_contribution": "Listwise permutation reranking: the LLM receives a query and a window of 20 numbered passages and outputs their relevance order; a sliding window of size 20 and step 10 moves from the bottom of the BM25 top-100 upward. nDCG@10: GPT-4 75.59 (DL19) / 70.56 (DL20) / 53.68 (BEIR avg) vs monoT5-3B 71.83/68.89/51.36, ChatGPT 65.80/62.91/49.37, BM25 50.58/47.96/43.42. Reranking only GPT-3.5's top-30 with GPT-4 costs about one-fifth of full GPT-4. Costs: ~$0.040/query (gpt-3.5), ~$0.596/query (gpt-4), ~$0.098 (gpt-4 on top-30); latency ~11 s (3.5) and ~32 s (4) per query for 100 passages. Distilling permutations into a 435M DeBERTa yields BEIR 53.03, beating monoT5-3B.",
+   "design_implication": "LLM listwise reranking is the highest-quality option but is 10-30 s and tens of cents per query at depth 100, so use it (a) only for offline/batch or high-value queries, (b) at shallow depth (top-20 to top-30) after a cheaper reranker, or (c) distilled into a small cross-encoder for online serving. Build the sliding-window loop generically so any chat model can be plugged in."
+  },
+  {
+   "title": "RankZephyr: Effective and Robust Zero-Shot Listwise Reranking is a Breeze!",
+   "authors": "Ronak Pradeep, Sahel Sharifymoghaddam, Jimmy Lin",
+   "year": 2023,
+   "venue": "arXiv preprint (Waterloo); released in rank_llm",
+   "url": "https://arxiv.org/abs/2312.02724",
+   "arxiv_id": "2312.02724",
+   "citation_signal": "Open-weights 7B listwise reranker that matched/exceeded GPT-4; widely used as the open alternative to proprietary LLM rerankers (rank_llm, LlamaIndex, Haystack integrations).",
+   "key_contribution": "7B Zephyr-beta model distilled in two stages: RankGPT-3.5 orderings on 100K MS MARCO queries (top-20 BM25 candidates, 3 epochs, batch 64, lr 5e-6) then RankGPT-4 orderings on up to 5K queries. Reranking SPLADE++ ED top-100 with window 20 / stride 10: nDCG@10 0.7816 (DL19) / 0.8159 (DL20) vs RankGPT-4 0.7464/0.7076, RankVicuna 0.7459/0.7473, first-stage SPLADE++ 0.7308/0.7195; 3 progressive passes reach 0.7855/0.8255. Robust to initial ordering and candidate count; beats GPT-4 on NovelEval.",
+   "design_implication": "An on-prem 7B listwise reranker can replace API LLM rerankers with no quality loss, which matters for confidential engineering data. Serve it behind the same listwise interface as RankGPT (window/stride parameters), feed it a strong first stage (SPLADE++ or hybrid), and consider 2-3 passes only for offline reranking."
+  },
+  {
+   "title": "Fine-Tuning LLaMA for Multi-Stage Text Retrieval (RepLLaMA / RankLLaMA)",
+   "authors": "Xueguang Ma, Liang Wang, Nan Yang, Furu Wei, Jimmy Lin",
+   "year": 2024,
+   "venue": "SIGIR 2024 (arXiv Oct 2023)",
+   "url": "https://arxiv.org/abs/2310.08319",
+   "arxiv_id": "2310.08319",
+   "citation_signal": "Semantic Scholar reports 478 citations; SIGIR; the template for LLM-backbone embedders (e5-mistral, gte-Qwen, NV-Embed) and pointwise LLM rerankers.",
+   "key_contribution": "Fine-tunes LLaMA as a dense retriever (RepLLaMA) and a pointwise reranker (RankLLaMA) on MS MARCO passage and document tasks; larger backbones are more effective, long context lets whole documents be embedded without segment-and-pool, and the pipeline shows strong zero-shot BEIR effectiveness.",
+   "design_implication": "LLM-backbone embedders are the current quality ceiling for dense retrieval but cost 10-70x more per embedded token than BERT-size models; expose model size as a cost tier and reserve 7B-class embedders for small, high-value corpora or for reranking rather than full-corpus indexing."
+  },
+  {
+   "title": "Precise Zero-Shot Dense Retrieval without Relevance Labels (HyDE)",
+   "authors": "Luyu Gao, Xueguang Ma, Jimmy Lin, Jamie Callan",
+   "year": 2023,
+   "venue": "ACL 2023 (2023.acl-long.99)",
+   "url": "https://arxiv.org/abs/2212.10496",
+   "arxiv_id": "2212.10496",
+   "citation_signal": "OpenAlex reports 325 (2023) + 21 (2022) citations; ACL main; implemented in LangChain, LlamaIndex and Haystack as a standard query transform.",
+   "key_contribution": "An instruction-following LLM writes N hypothetical answer documents for the query; an unsupervised encoder (Contriever) embeds them; the query vector is the mean of those embeddings (optionally including the real query embedding as an N+1th vector). TREC DL19/DL20 nDCG@10: HyDE 61.3/57.9 vs Contriever 44.5/42.1 and BM25 50.6/48.0, approaching fine-tuned ANCE 64.5/64.6; Recall@1000 88.0/84.4 beats all fine-tuned models listed. BEIR: SciFact 69.1, ArguAna 46.6, FiQA 27.3, DBPedia 36.8 vs Contriever 64.9/37.9/24.5/29.2; TREC-COVID essentially ties BM25 (59.3 vs 59.5).",
+   "design_implication": "HyDE is the strongest zero-shot dense trick when no labelled data exists, and it is especially good at recall (so it belongs before a reranker). It adds an LLM call per query, so route it: enable for short/ambiguous queries or when first-stage score dispersion is low, cache hypothetical documents per normalized query, and prefer a small fast model for generation."
+  },
+  {
+   "title": "Query2doc: Query Expansion with Large Language Models",
+   "authors": "Liang Wang, Nan Yang, Furu Wei",
+   "year": 2023,
+   "venue": "EMNLP 2023",
+   "url": "https://arxiv.org/abs/2303.07678",
+   "arxiv_id": "2303.07678",
+   "citation_signal": "OpenAlex reports ~193 citations; EMNLP main; the canonical LLM query-expansion result for sparse retrieval.",
+   "key_contribution": "Few-shot (k = 4 random MS MARCO examples) LLM generates a pseudo-document; for BM25 the original query is repeated 5 times and concatenated with the pseudo-document (not tuned per dataset). BM25 gains: MS MARCO dev MRR@10 18.4 -> 21.4, TREC DL19 nDCG@10 51.2 -> 66.2, DL20 47.7 -> 62.9. Dense gains are smaller and shrink for distilled models (DPR +1.4 MRR; SimLM +0.4; E5+KD +0.8). Cost: ~550k API calls cost nearly $55k; BM25 search 16 ms vs >2,000 ms for the LLM call, and 177 ms for the expanded-query search.",
+   "design_implication": "LLM query expansion is worth +15 nDCG points for a pure lexical first stage but is near-useless for a strong distilled dense retriever and is 100x the latency of search itself. Treat it as an optional, cached, router-gated stage that is most valuable on the BM25/SPLADE channel of a hybrid system, and weight the original query (x5 repetition) so the expansion cannot hijack it."
+  },
+  {
+   "title": "Document Expansion by Query Prediction (doc2query)",
+   "authors": "Rodrigo Nogueira, Wei Yang, Jimmy Lin, Kyunghyun Cho",
+   "year": 2019,
+   "venue": "arXiv preprint",
+   "url": "https://arxiv.org/abs/1904.08375",
+   "arxiv_id": "1904.08375",
+   "citation_signal": "Widely adopted document-expansion method (docT5query variant is a BEIR baseline that beat BM25 on 11-12 of 18 datasets with +1.6% average nDCG@10).",
+   "key_contribution": "Trains a seq2seq model on (query, relevant passage) pairs to predict likely queries for each passage and appends them to the passage before indexing. Indexing-time cost only; without a reranker it approaches neural-reranker quality at BM25 speed; with a reranker it set SOTA on two tasks.",
+   "design_implication": "Moves computation from query time to index time, which is the right trade for latency-sensitive serving. In production pair it with Doc2Query-- filtering (below) and consider LLM-generated contextual summaries (Anthropic) as the modern generalization."
+  },
+  {
+   "title": "Doc2Query--: When Less is More",
+   "authors": "Mitko Gospodinov, Sean MacAvaney, Craig Macdonald",
+   "year": 2023,
+   "venue": "ECIR 2023",
+   "url": "https://arxiv.org/abs/2301.03266",
+   "arxiv_id": "2301.03266",
+   "citation_signal": "ECIR (top European IR venue); the documented pitfall paper for generative document expansion.",
+   "key_contribution": "Shows doc2query generators hallucinate queries not grounded in the passage, which hurts effectiveness and inflates the index. Filtering generated queries with a relevance model before indexing improves retrieval effectiveness by up to 16%, reduces mean query execution time by 23%, and shrinks the index by 33%.",
+   "design_implication": "Any generative enrichment at index time (doc2query, LLM summaries, synthetic Q&A) needs a grounding filter (cross-encoder score threshold or entailment check) before the text enters the index; log and sample the filtered-out set as a quality monitor."
+  },
+  {
+   "title": "Introducing Contextual Retrieval",
+   "authors": "Anthropic",
+   "year": 2024,
+   "venue": "Anthropic engineering blog",
+   "url": "https://www.anthropic.com/news/contextual-retrieval",
+   "arxiv_id": "",
+   "citation_signal": "Authoritative industry documentation; the most-cited practitioner reference for chunk context enrichment + BM25 + reranking, replicated in LlamaIndex/LangChain cookbooks.",
+   "key_contribution": "Prepends a 50-100-token LLM-generated, document-specific context to each chunk before embedding and BM25 indexing (prompt-cached full document as input). Top-20 retrieval failure rate: baseline 5.7% -> 3.7% with contextual embeddings (-35%) -> 2.9% with contextual embeddings + contextual BM25 (-49%) -> 1.9% adding a Cohere reranker over top-150 to top-20 (-67%). Passing 20 chunks to the generator beat 5 or 10. One-time cost ~$1.02 per million document tokens (800-token chunks, 8k-token docs). Knowledge bases under ~200k tokens may skip RAG and use prompt caching.",
+   "design_implication": "Three production defaults follow directly: (1) enrich chunks with document-level context at index time, (2) run BM25 and embeddings in parallel and fuse (RRF in their implementation), (3) over-retrieve (~150) and rerank to ~20. Also implement a corpus-size router: below ~200k tokens, bypass retrieval and cache the whole corpus in the prompt."
+  },
+  {
+   "title": "Lost in the Middle: How Language Models Use Long Contexts",
+   "authors": "Nelson F. Liu, Kevin Lin, John Hewitt, Ashwin Paranjape, Michele Bevilacqua, Fabio Petroni, Percy Liang",
+   "year": 2023,
+   "venue": "Transactions of the Association for Computational Linguistics (TACL)",
+   "url": "https://arxiv.org/abs/2307.03172",
+   "arxiv_id": "2307.03172",
+   "citation_signal": "TACL; one of the most cited RAG-era papers (thousands of citations across trackers); the origin of the 'U-shaped' position-bias finding.",
+   "key_contribution": "Multi-document QA with 20 retrieved documents: GPT-3.5-Turbo accuracy is 75.8% when the gold document is first, 53.8% in the middle (position 9), 63.2% last; closed-book is 56.1% and oracle 88.3%, so a mid-context gold document can score below no retrieval at all. Reader accuracy saturates long before retriever recall: going past 20 documents adds only ~1.5%.",
+   "design_implication": "The reranker's job is not only to find relevant chunks but to order them so the most relevant land at the start (and end) of the context; the component should return a position-aware ordering and cap the number of passed chunks (typically 5-20) rather than maximizing recall into the prompt."
+  },
+  {
+   "title": "Dense X Retrieval: What Retrieval Granularity Should We Use?",
+   "authors": "Tong Chen, Hongwei Wang, Sihao Chen, Wenhao Yu, Kaixin Ma, Xinran Zhao, Hongming Zhang, Dong Yu",
+   "year": 2023,
+   "venue": "arXiv preprint (Dec 2023, revised Oct 2024)",
+   "url": "https://arxiv.org/abs/2312.06648",
+   "arxiv_id": "2312.06648",
+   "citation_signal": "Widely cited granularity study (hundreds of citations across trackers); the 'proposition indexing' idea is implemented in LangChain/LlamaIndex.",
+   "key_contribution": "Indexes Wikipedia as 41.4M 100-word passages, 114M sentences, or 257M atomic propositions (avg 11.2 words; 6.3 per passage) produced by a Flan-T5-large 'Propositionizer' distilled from 42,857 GPT-4 examples. Proposition retrieval raises Recall@5 for unsupervised retrievers substantially (Contriever +9.3 avg; EQ dataset 36.3 -> 51.7) and modestly for supervised ones (GTR SQuAD 54.4 -> 63.3), and improves downstream EM at a fixed 500-token budget by +2.7 to +4.1 points.",
+   "design_implication": "Granularity is a tunable: smaller units sharpen retrieval precision per token but multiply index size ~6x and require a generation step at indexing. A practical production pattern is multi-granularity indexing (propositions or sentences for matching, parent passage returned for context), which the component should support via parent/child chunk references."
+  },
+  {
+   "title": "Is Semantic Chunking Worth the Computational Cost?",
+   "authors": "Renyi Qu, Ruixuan Tu, Forrest Bao",
+   "year": 2024,
+   "venue": "arXiv preprint",
+   "url": "https://arxiv.org/abs/2410.13070",
+   "arxiv_id": "2410.13070",
+   "citation_signal": "The systematic chunking comparison most cited by practitioners when choosing fixed vs semantic chunking (Vectara authors).",
+   "key_contribution": "Compares fixed-size, breakpoint-based semantic and clustering-based semantic chunkers over 10 document-retrieval datasets and 5 evidence-retrieval/QA datasets with three embedders. Semantic chunking wins only on artificially stitched multi-topic documents (e.g. NQ-stitched F1@5 63.9 vs 43.8); on natural documents fixed-size wins (HotpotQA 90.6 vs 87.4); evidence-retrieval differences are under ~1.7 points and answer-generation BERTScore differences at most 0.01. Embedding model quality mattered more than chunking (stella 1.5B averaged +7.4% F1 over bge-large).",
+   "design_implication": "Default to a cheap fixed-size/recursive chunker and spend the budget on a better embedder and reranker; enable semantic chunking only for heterogeneous, multi-topic documents (e.g. concatenated meeting notes, mixed incident timelines) and prove the gain on your own evaluation set."
+  },
+  {
+   "title": "Evaluating Chunking Strategies for Retrieval",
+   "authors": "Brandon Smith, Anton Troynikov (Chroma Technical Report)",
+   "year": 2024,
+   "venue": "Chroma research technical report",
+   "url": "https://www.trychroma.com/research/evaluating-chunking",
+   "arxiv_id": "",
+   "citation_signal": "Widely referenced practitioner benchmark from a vector-database vendor; introduced token-level recall/precision/IoU chunk metrics and the ClusterSemanticChunker.",
+   "key_contribution": "Token-level evaluation of RecursiveCharacterTextSplitter, TokenTextSplitter, Kamradt semantic, ClusterSemantic and LLM chunkers (5 chunks retrieved, text-embedding-3-large). Recursive 200 tokens / 0 overlap: recall 88.1, precision 7.0; Recursive 400/0: recall 89.5; ClusterSemantic 400/0: recall 91.3; ClusterSemantic 200/0: best precision/IoU 8.0; LLM chunker best recall 91.9 but slow and expensive; the common default 800/400 had the worst IoU (1.5). Overlap mostly adds redundant tokens except with small-context embedders (all-MiniLM-L6-v2 preferred 250/125).",
+   "design_implication": "Set defaults at ~200-400 tokens with zero or minimal overlap using a recursive splitter that honours sentence boundaries; make chunk size/overlap per-collection configuration; recompute chunks when the embedding model changes. Measure chunking with token-level IoU, not just hit rate."
+  },
+  {
+   "title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+   "authors": "Patrick Lewis, Ethan Perez, Aleksandra Piktus, Fabio Petroni, Vladimir Karpukhin, et al.",
+   "year": 2020,
+   "venue": "NeurIPS 2020",
+   "url": "https://arxiv.org/abs/2005.11401",
+   "arxiv_id": "2005.11401",
+   "citation_signal": "NeurIPS; the paper that named RAG (many thousands of citations); DPR is its retriever.",
+   "key_contribution": "Combines a seq2seq generator (parametric memory) with a dense Wikipedia index accessed through DPR (non-parametric memory); RAG-Sequence conditions on the same passages for the whole output and RAG-Token can switch passages per token. Sets SOTA on three open-domain QA tasks and generates more specific, diverse and factual text than parametric-only baselines.",
+   "design_implication": "Defines the retriever as a swappable, independently indexable module whose output is a ranked list of passages with scores, which is exactly the contract the hybrid-retrieval component should implement so the generation stage (Pipeline RAG model) can consume it unchanged."
+  },
+  {
+   "title": "MS MARCO: A Human Generated MAchine Reading COmprehension Dataset",
+   "authors": "Payal Bajaj, Daniel Campos, Nick Craswell, Li Deng, Jianfeng Gao, et al. (Tri Nguyen et al. in the 2016 version)",
+   "year": 2016,
+   "venue": "arXiv preprint (NeurIPS 2016 CoCo workshop lineage)",
+   "url": "https://arxiv.org/abs/1611.09268",
+   "arxiv_id": "1611.09268",
+   "citation_signal": "The training and evaluation corpus for nearly every neural retriever and reranker above (DPR hybrids, ColBERT, SPLADE, monoT5, E5, RankZephyr); the TREC Deep Learning tracks are built on it.",
+   "key_contribution": "1,010,916 real Bing questions with human answers, 8,841,823 passages from 3,563,535 web documents, 182,669 well-formed rewritten answers; defines the passage-ranking task (MRR@10) that became the standard supervised training signal for retrieval.",
+   "design_implication": "Most off-the-shelf retrievers and rerankers are MS MARCO-trained web-search models; expect a domain gap on engineering text and plan for in-domain fine-tuning or at least in-domain evaluation (BEIR-style) before trusting leaderboard numbers."
+  },
+  {
+   "title": "Pyserini: An Easy-to-Use Python Toolkit to Support Replicable IR Research with Sparse and Dense Representations",
+   "authors": "Jimmy Lin, Xueguang Ma, Sheng-Chieh Lin, Jheng-Hong Yang, Ronak Pradeep, Rodrigo Nogueira",
+   "year": 2021,
+   "venue": "arXiv preprint (SIGIR 2021 resource paper lineage)",
+   "url": "https://arxiv.org/abs/2102.10073",
+   "arxiv_id": "2102.10073",
+   "citation_signal": "The reference implementation for reproducible BM25, dense and hybrid baselines (Anserini/Lucene + FAISS); used to produce the DPR replication numbers above.",
+   "key_contribution": "Packages BM25 (Lucene), dense (FAISS) and hybrid retrieval with pre-built indexes, topics, qrels and evaluation scripts, plus regression tests that pin expected metric values for replicability.",
+   "design_implication": "Model your evaluation harness on Pyserini's pattern: pre-built indexes, versioned qrels, and regression tests that fail CI if nDCG@10/Recall@100 drift beyond a tolerance when models or fusion parameters change."
+  },
+  {
+   "title": "ACORN: Performant and Predicate-Agnostic Search Over Vector Embeddings and Structured Data",
+   "authors": "Liana Patel, Peter Kraft, Carlos Guestrin, Matei Zaharia",
+   "year": 2024,
+   "venue": "arXiv preprint (Stanford; SIGMOD-track work)",
+   "url": "https://arxiv.org/abs/2403.04871",
+   "arxiv_id": "2403.04871",
+   "citation_signal": "Leading recent treatment of filtered (metadata-constrained) vector search from the ColBERT/Spark group; the problem it solves is a documented failure point of HNSW post-filtering in every vector DB's docs.",
+   "key_contribution": "Extends HNSW with predicate-subgraph traversal and a predicate-agnostic construction so that arbitrary filters (not just small equality sets) can be applied during graph search; reports 2-1,000x higher throughput at fixed recall than prior pre-/post-filtering approaches.",
+   "design_implication": "Metadata filtering (project, document type, revision, date range, severity, component) is first-class in engineering retrieval; the component must push filters into the index (filtered HNSW / inverted-index pre-filter) rather than post-filter the top-k, or recall collapses for selective predicates."
+  },
+  {
+   "title": "CoIR: A Comprehensive Benchmark for Code Information Retrieval Models",
+   "authors": "Xiangyang Li, Kuicai Dong, Yi Quan Lee, Wei Xia, Hao Zhang, Xinyi Dai, Yasheng Wang, Ruiming Tang",
+   "year": 2025,
+   "venue": "ACL 2025 Main (arXiv July 2024)",
+   "url": "https://arxiv.org/abs/2407.02883",
+   "arxiv_id": "2407.02883",
+   "citation_signal": "ACL main; the current standard code-retrieval benchmark, pip-installable with the BEIR/MTEB data schema and included in MTEB's code leaderboard.",
+   "key_contribution": "10 curated code datasets across 8 retrieval tasks (text-to-code, code-to-code, code-to-text, hybrid) and 7 domains; evaluates 9 widely used retrievers and finds code retrieval remains hard even for SOTA models.",
+   "design_implication": "For engineering workloads, evaluate the embedding and reranking choices on CoIR (and on CodeSearchNet's 99 expert-judged queries) in addition to BEIR; expect to need a code-aware embedder or hybrid with BM25 over identifiers for repository search."
+  },
+  {
+   "title": "CodeSearchNet Challenge: Evaluating the State of Semantic Code Search",
+   "authors": "Hamel Husain, Ho-Hsiang Wu, Tiferet Gazit, Miltiadis Allamanis, Marc Brockschmidt",
+   "year": 2019,
+   "venue": "arXiv preprint (GitHub/Microsoft Research)",
+   "url": "https://arxiv.org/abs/1909.09436",
+   "arxiv_id": "1909.09436",
+   "citation_signal": "Foundational code-search corpus (~6M functions in 6 languages, ~2M with docstring queries, 99 expert-annotated queries); the basis of CodeBERT/GraphCodeBERT evaluations and the CoIR CodeSearchNet subsets.",
+   "key_contribution": "Releases the corpus and challenge with expert relevance annotations (~4k) and baseline neural bag-of-words / RNN / self-attention models for natural-language-to-code retrieval.",
+   "design_implication": "Use its data to mine (docstring, function) training pairs when fine-tuning an embedder for a company's own codebase, and reuse its evaluation protocol for the code channel of the hybrid retriever."
+  },
+  {
+   "title": "Cumulated Gain-Based Evaluation of IR Techniques",
+   "authors": "Kalervo Järvelin, Jaana Kekäläinen",
+   "year": 2002,
+   "venue": "ACM Transactions on Information Systems 20(4), pp. 422-446",
+   "url": "https://www.fi.muni.cz/~xkohout7/Research/clanky_cizi/evaluation/p422-jarvelin.pdf",
+   "arxiv_id": "",
+   "citation_signal": "The origin of (n)DCG, the primary metric of BEIR, MTEB retrieval, and TREC Deep Learning; many thousands of citations.",
+   "key_contribution": "Introduces cumulated gain, discounted cumulated gain (log-position discount) and normalization against the ideal ranking (nDCG) so that graded relevance judgments credit systems for ranking highly relevant documents early; demonstrated on TREC-7 with four-point graded judgments.",
+   "design_implication": "Report nDCG@10 as the headline ranking metric and support graded relevance labels in the evaluation harness; use Recall@k for first-stage capacity and MRR@10 when there is a single correct passage."
+  },
+  {
+   "title": "Reciprocal rank fusion (RRF) retriever - Elasticsearch reference",
+   "authors": "Elastic",
+   "year": 2024,
+   "venue": "Elasticsearch official documentation",
+   "url": "https://www.elastic.co/guide/en/elasticsearch/reference/current/rrf.html",
+   "arxiv_id": "",
+   "citation_signal": "Production documentation of the most widely deployed search engine's hybrid fusion; encodes the de facto industry defaults.",
+   "key_contribution": "score = sum over retrievers of 1/(rank_constant + rank); default rank_constant 60 (min 1; higher gives lower-ranked docs more influence); rank_window_size defaults to size and must be >= size (how many top hits each child retriever contributes; larger improves relevance at a performance cost); at least two child retrievers, equally weighted; RRF 'requires no tuning'. Also documents a linear retriever that combines normalized scores (minmax / l2_norm / none) with per-retriever weights.",
+   "design_implication": "Mirror these knobs in the component API (fusion = rrf|linear, rank_constant, rank_window_size, per-retriever weight, normalizer) so it maps onto Elasticsearch/OpenSearch/Vespa backends without translation, and default rank_window_size to max(size, 100)."
+  },
+  {
+   "title": "Unlocking the Power of Hybrid Search - A Deep Dive into Weaviate's Fusion Algorithms",
+   "authors": "Weaviate (Dirk Kulawiak, Erika Cardenas)",
+   "year": 2023,
+   "venue": "Weaviate engineering blog + hybrid search docs",
+   "url": "https://weaviate.io/blog/hybrid-search-fusion-algorithms",
+   "arxiv_id": "",
+   "citation_signal": "Vendor documentation for a widely used open-source vector database; records a production default change from rank fusion to score fusion.",
+   "key_contribution": "rankedFusion = RRF with 1/(rank+60); relativeScoreFusion normalizes each list so top score = 1 and bottom = 0, then applies alpha (1 = pure vector, 0 = pure keyword) and sums. relativeScoreFusion became the default in v1.24 because it retains score-gap information and works with AutoCut; internal FiQA tests showed ~6% recall improvement over rankedFusion.",
+   "design_implication": "Independent industry corroboration of Bruch et al.: when scores are available, normalized convex combination generally beats RRF. Expose alpha as the single domain-tuning knob (Weaviate alpha corresponds to Bruch's alpha), and keep RRF as the fallback when a channel cannot emit comparable scores."
+  },
+  {
+   "title": "Reranking Best Practices - Cohere documentation",
+   "authors": "Cohere",
+   "year": 2025,
+   "venue": "Cohere official documentation",
+   "url": "https://docs.cohere.com/docs/reranking-best-practices",
+   "arxiv_id": "",
+   "citation_signal": "Documentation of the most widely used commercial reranker API (used in Anthropic's contextual retrieval experiments); defines practical limits and thresholding practice.",
+   "key_contribution": "Hard limits: documents x max_chunks_per_doc <= 10,000 per call; v3.x documents chunked at 4,093 tokens (4,096 context), v4 at 32,764 tokens; queries truncated at 2,048 tokens (v3). Scores are normalized to [0,1] but are query-dependent and not ratios. Recommended thresholding: pick 30-50 representative queries, pair each with a borderline-relevant document, score them, and use the mean as the relevance cut-off. Semi-structured data is passed as YAML strings with keys in priority order because long inputs truncate.",
+   "design_implication": "Build the reranker adapter with explicit per-document token truncation and a configurable relevance threshold calibrated by the 30-50-borderline-query procedure; serialize structured engineering records (BOM rows, incident fields, test-case metadata) as ordered key: value text with the most discriminative fields first."
+  },
+  {
+   "title": "Claude prompting best practices - Long context prompting",
+   "authors": "Anthropic",
+   "year": 2025,
+   "venue": "Anthropic/Claude developer documentation",
+   "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices",
+   "arxiv_id": "",
+   "citation_signal": "Official model-provider guidance; defines the state of practice for how retrieved documents are presented to the generator.",
+   "key_contribution": "For 20k+ token inputs: put long documents at the top of the prompt and the query/instructions at the end (queries at the end improved response quality by up to 30% in tests on complex multi-document inputs); wrap each document in <document> tags with <source> and <document_content> plus metadata subtags; ask the model to first extract relevant quotes into <quotes> tags before answering to focus attention.",
+   "design_implication": "The retrieval component's output format should be generator-ready: an ordered list of documents each carrying source, metadata and content fields so the pipeline can emit the recommended XML structure, place documents before the question, and support a quote-extraction verification step (links to the Answer Verification model)."
+  }
+ ],
+ "techniques": [
+  {
+   "name": "Tuned BM25 / BM25F lexical first stage",
+   "description": "Index chunk text (plus title, section path, and generated context) in an inverted index. Score with BM25: for each query term t, IDF(t) * tf*(k1+1) / (tf + k1*(1 - b + b*dl/avgdl)). For multi-field engineering documents use BM25F: compute a per-document pseudo-frequency by summing field term frequencies weighted by per-field boosts (title, heading, identifier fields high; body 1.0), then apply the saturation once. Keep a dedicated analyzer for identifiers (part numbers, error codes, requirement IDs, function names): lowercase, keep punctuation-joined tokens (e.g. 'ERR_1203', 'A320-NEO'), and emit both the whole identifier and its sub-tokens. Return the top-N (N = fusion window, default 200-1000) with raw scores.",
+   "source_titles": [
+    "The Probabilistic Relevance Framework: BM25 and Beyond",
+    "BEIR: A Heterogenous Benchmark for Zero-shot Evaluation of Information Retrieval Models",
+    "A Replication Study of Dense Passage Retriever",
+    "Introducing Contextual Retrieval"
+   ],
+   "when_to_use": "Always, as one channel of the hybrid. Dominant when queries contain exact identifiers, rare technical terms, or the corpus is out of domain for the embedding model (BEIR: dense models averaged below BM25 zero-shot).",
+   "tradeoffs": "Vocabulary mismatch (synonyms, paraphrase) is not handled; fix with SPLADE, query expansion or the dense channel. Very cheap: ~20 ms CPU per query on 1M documents, 0.4 GB index (BEIR Table 3). An under-tuned BM25 baseline hides hybrid gains (Ma et al. 2021).",
+   "default_parameters": "k1 in [1.2, 2.0] and b = 0.75 as the long-standing defaults discussed in Robertson & Zaragoza's parameter-optimisation chapter; grid-search k1 in {0.6..2.0} and b in {0.3..1.0} on an in-domain dev set (Ma et al. show the tuned baseline differs by ~4 points top-20 accuracy). Candidate depth for fusion: 1000 (Ma et al.), or 150-200 when a reranker follows (Anthropic used 150)."
+  },
+  {
+   "name": "Dense bi-encoder retrieval with instruction prefixes and HNSW ANN",
+   "description": "Choose an embedding model from the MTEB/BEIR retrieval leaderboard (E5/BGE/GTE class, 110M-335M params by default). Encode documents once with the model's document prefix ('passage: ' for E5; none or instruction for BGE docs) and queries with the query prefix/instruction ('query: ' for E5; 'Represent this sentence for searching relevant passages: '-style instruction for BGE). Normalize vectors and use cosine/dot product. Index with HNSW (FAISS, hnswlib, or the vector DB's HNSW). Retrieve top-N with scores. Keep a model registry keyed by (model_id, prefix_scheme, dimension, normalization) and store it with the index so re-embedding is triggered on model change.",
+   "source_titles": [
+    "Dense Passage Retrieval for Open-Domain Question Answering",
+    "Text Embeddings by Weakly-Supervised Contrastive Pre-training (E5)",
+    "C-Pack: Packed Resources For General Chinese Embeddings (BGE)",
+    "Towards General Text Embeddings with Multi-stage Contrastive Learning (GTE)",
+    "MTEB: Massive Text Embedding Benchmark",
+    "Unsupervised Dense Information Retrieval with Contrastive Learning (Contriever)"
+   ],
+   "when_to_use": "Always, as the semantic channel; critical for paraphrased natural-language questions and cross-lingual queries. Alone it is sufficient only in-domain with fine-tuning; otherwise fuse.",
+   "tradeoffs": "3 GB per 1M passages at 768-dim fp32 (BEIR), 14-20 ms GPU / 125-275 ms CPU per query; zero-shot ranking quality can trail BM25 (Contriever nDCG@10 36.0 vs 41.7) although recall@100 is competitive; single vectors have bounded capacity for long documents (Luan et al.), so keep chunks short.",
+   "default_parameters": "Chunk 200-400 tokens; HNSW M = 32-64 (DPR used 512 neighbours in FAISS HNSW), efConstruction = 200, efSearch = 128 (DPR), raise efSearch until Recall@100 vs flat search >= 0.98; retrieve top-100 to top-1000 for fusion. Use E5/BGE/GTE-base (110M) as default, -large (335M) when GPU budget allows, LLM-backbone (7B, RepLLaMA-style) only for small high-value corpora. Always apply the model's prefixes."
+  },
+  {
+   "name": "Learned sparse retrieval (SPLADE / SPLADE++) as the expansion-aware lexical channel",
+   "description": "Run a SPLADE++ encoder over each chunk: for every input token, take the MLM-head logits over the 30,522-term vocabulary, apply log(1+ReLU(.)), max-pool over tokens to get one weight per vocabulary term, and store the non-zero (term, weight) pairs in an inverted index (impact-ordered postings). Encode the query the same way (stronger sparsity). Score = dot product of query and document sparse vectors, executed by the inverted index. Optionally combine with BM25 in the same index as a second field.",
+   "source_titles": [
+    "SPLADE: Sparse Lexical and Expansion Model for First Stage Ranking",
+    "From Distillation to Hard Negative Sampling: Making Sparse Neural IR Models More Effective (SPLADE++)",
+    "RankZephyr: Effective and Robust Zero-Shot Listwise Reranking is a Breeze!"
+   ],
+   "when_to_use": "When you want dense-level zero-shot quality (BEIR 50.5-50.7 vs 43.7 BM25, 49.7 ColBERTv2) while keeping inverted-index infrastructure, interpretability (visible term weights), and synonym expansion for the lexical side. Excellent first stage before an LLM reranker (RankZephyr's setup).",
+   "tradeoffs": "Requires a GPU/CPU forward pass per query (~BERT-base cost) and a learned model that is MS MARCO-trained (domain gap possible); document expansion increases postings vs BM25; latency depends on sparsity (FLOPS regularizer).",
+   "default_parameters": "Use the released SPLADE++ CoCondenser-EnsembleDistil checkpoint (MS MARCO MRR@10 38.0). If training: FLOPS lambda in [1e-4, 1e-1], ramped quadratically to step 50k, lambda_q > lambda_d; target ~18 non-zero terms/doc and ~6/query for the most efficient setting (MRR@10 0.296) or looser sparsity for ~0.32-0.38. Fuse its top-1000 with the dense channel."
+  },
+  {
+   "name": "Multi-vector late interaction (ColBERTv2 + PLAID) as a precision-oriented retriever/reranker",
+   "description": "Encode each chunk into per-token 128-dim vectors; cluster all token vectors into K centroids (K = nearest power of two above 16*sqrt(#token embeddings)); store each vector as centroid id + 2-bit residual (~36 bytes). At query time (32 query tokens incl. [MASK] augmentation), PLAID: (1) find nearest centroids per query token, (2) score candidate passages by centroid interaction, (3) prune to ndocs, (4) decompress residuals only for survivors and compute exact MaxSim = sum over query tokens of max cosine to any passage token. Can be used end-to-end or to rerank a fused candidate list (cheaper than a cross-encoder: 61 ms vs 10,700 ms for BERT-base on 1000 candidates in the original ColBERT).",
+   "source_titles": [
+    "ColBERT: Efficient and Effective Passage Search via Contextualized Late Interaction over BERT",
+    "ColBERTv2: Effective and Efficient Retrieval via Lightweight Late Interaction",
+    "PLAID: An Efficient Engine for Late Interaction Retrieval",
+    "Sparse, Dense, and Attentional Representations for Text Retrieval"
+   ],
+   "when_to_use": "Long technical passages (specifications, standards clauses, log excerpts, code) where token-level matching matters and single vectors saturate; as a middle tier when cross-encoder latency is unaffordable; when out-of-domain robustness is required (LoTTE Success@5 71.6 vs 48.3 BM25).",
+   "tradeoffs": "Index is 6-10x larger than single-vector (16-25 GiB for 8.8M MS MARCO passages even compressed; 154 GiB uncompressed); needs the PLAID engine; indexing is GPU-heavy (hours on 4 GPUs for 8.8M passages). Latency tens of ms GPU, tens-hundreds ms CPU.",
+   "default_parameters": "dim = 128, query max length 32 tokens (raise to 64-128 for long engineering queries), 2-bit residuals, nbits=2; PLAID ncells = 4-8 centroids per query token, ndocs = 1024 candidates before exact scoring, centroid_score_threshold ~0.45-0.5 (tune for latency); rerank window 100-1000."
+  },
+  {
+   "name": "Rank fusion: Reciprocal Rank Fusion (zero-config) and normalized convex combination (tuned)",
+   "description": "Collect top-N lists L_1..L_m from each channel. RRF: score(d) = sum_i 1/(k + rank_i(d)) over lists containing d; sort descending. Convex combination (CC): normalize each channel's scores with theoretical min-max (divide by the channel's theoretical range, e.g. cosine in [-1,1] -> [0,1]; for BM25 use observed min-max over the top-N or an empirical upper bound), then score(d) = alpha*s_dense(d) + (1-alpha)*s_lexical(d), with missing scores treated as that channel's minimum (0). For m > 2 channels generalize to a weight vector summing to 1. Fit alpha by grid search in steps of 0.05 maximizing nDCG@10 on a dev set of judged queries; re-fit per collection. Deduplicate by canonical chunk id before fusion; optionally collapse multiple chunks of one parent document (keep max) after fusion.",
+   "source_titles": [
+    "Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods",
+    "An Analysis of Fusion Functions for Hybrid Retrieval",
+    "A Replication Study of Dense Passage Retriever",
+    "Reciprocal rank fusion (RRF) retriever - Elasticsearch reference",
+    "Unlocking the Power of Hybrid Search - A Deep Dive into Weaviate's Fusion Algorithms"
+   ],
+   "when_to_use": "Whenever two or more channels run. RRF when no labelled queries exist or channel scores are incomparable (e.g. a third-party API returns ranks only). CC once >= 30-50 judged queries exist (Bruch: alpha converges with <5% of training data) and when score gaps carry information (Weaviate: +6% recall on FiQA).",
+   "tradeoffs": "RRF discards score magnitude and its constant does not transfer when tuned (MS MARCO-tuned (10,4) dropped HotpotQA nDCG from 0.675 to 0.621); CC requires calibration data and score normalization and can be skewed by a channel with heavy-tailed scores. Both are O(m*N) and negligible in latency.",
+   "default_parameters": "RRF k = 60 (Cormack et al.; Elasticsearch rank_constant default 60); rank_window_size = max(requested size, 100), 1000 when a reranker is not used; equal channel weights. CC: alpha (semantic weight) = 0.7 default, search [0.5, 0.9]; Bruch found alpha = 0.8 best with [0.6, 0.8] consistently good; Ma et al. found BM25 weight 0.55 on raw DPR scores / 1.30 normalized via grid over [0,2] step 0.05. Theoretical min-max normalization."
+  },
+  {
+   "name": "Cross-encoder / monoT5 pointwise reranking of the fused pool",
+   "description": "For each (query, candidate) pair in the fused top-K, run a cross-encoder (MiniLM/DeBERTa/bge-reranker/Cohere Rerank) or a seq2seq model prompted as 'Query: {q} Document: {d} Relevant:' and take softmax over only the 'true'/'false' token logits as P(relevant). Truncate each document to the model's window (512 tokens for BERT-class; 4,093 or 32,764 for Cohere v3/v4) keeping the generated context/title first. Sort by score; apply an optional relevance threshold calibrated per domain; return top-k' (5-20) with scores and original channel provenance.",
+   "source_titles": [
+    "Passage Re-ranking with BERT (monoBERT)",
+    "Document Ranking with a Pretrained Sequence-to-Sequence Model (monoT5)",
+    "BEIR: A Heterogenous Benchmark for Zero-shot Evaluation of Information Retrieval Models",
+    "Introducing Contextual Retrieval",
+    "Reranking Best Practices - Cohere documentation"
+   ],
+   "when_to_use": "Nearly always before passing context to a generator: it is the largest generalizable quality gain (BEIR +11% over BM25, best on 16/18 datasets; Anthropic: failure rate 2.9% -> 1.9%). Skip only for ultra-low-latency autocomplete-style use.",
+   "tradeoffs": "450 ms GPU / 6,100 ms CPU for BM25+CE over 1M docs in BEIR vs 20 ms for BM25; cost scales linearly with K; truncation can hide the relevant span in long documents; scores are query-dependent (not comparable across queries) so thresholds must be calibrated.",
+   "default_parameters": "Rerank depth K = 100 (research default; RankGPT/RankZephyr) or 150 (Anthropic) and return top 20 to the generator (20 beat 5 and 10 in Anthropic's test); K = 1000 for offline/batch. Default model: monoT5-base/3B-class or bge-reranker-large/MiniLM-L12 cross-encoder for online, monoT5-3B for offline. Threshold: mean score of 30-50 borderline (query, doc) pairs (Cohere procedure). Max 512 tokens per passage for BERT-class rerankers."
+  },
+  {
+   "name": "Listwise LLM reranking with sliding windows (RankGPT / RankZephyr), optionally distilled",
+   "description": "Take the top-K candidates (K = 100, from the fused + optionally cross-encoder-reranked list). Starting from the bottom, present a window of w passages, each tagged [1]..[w] and truncated to ~300 tokens, and ask the LLM to output a permutation of identifiers ordered by relevance; parse the permutation, slide the window up by stride s, and repeat so top candidates bubble upward; run p passes if desired. Use an open 7B model (RankZephyr) on-prem or a frontier API model; to reduce cost, use the cheaper model for the full K and the expensive model only on its top-30. For online latency, distill the permutations into a 400M cross-encoder (RankNet loss over LLM-generated orderings).",
+   "source_titles": [
+    "Is ChatGPT Good at Search? Investigating Large Language Models as Re-Ranking Agents (RankGPT)",
+    "RankZephyr: Effective and Robust Zero-Shot Listwise Reranking is a Breeze!",
+    "Fine-Tuning LLaMA for Multi-Stage Text Retrieval (RepLLaMA / RankLLaMA)"
+   ],
+   "when_to_use": "High-value or offline queries (evaluation set construction, incident post-mortem search, compliance review), building training labels for a cheaper reranker, or when zero-shot quality on novel domains must be maximal (GPT-4 nDCG@10 75.59 vs monoT5-3B 71.83 on DL19; RankZephyr 0.78/0.82 on DL19/DL20).",
+   "tradeoffs": "~11 s (gpt-3.5) to ~32 s (gpt-4) and $0.04-$0.60 per query at K = 100 (RankGPT); sensitive to window prompt formatting; proprietary models raise confidentiality concerns for engineering data (mitigated by RankZephyr on-prem). Distillation needs ~10K queries (~$40 of gpt-3.5 labels in RankGPT).",
+   "default_parameters": "window w = 20, stride s = 10, K = 100 (RankGPT, RankZephyr defaults), 1 pass online / 3 passes offline (RankZephyr-rho); two-tier: cheap model over 100, strong model over its top-30 (~1/5 the cost of strong-only); passage truncation ~300 tokens; temperature 0."
+  },
+  {
+   "name": "LLM query expansion and hypothetical documents (HyDE / Query2doc), router-gated and cached",
+   "description": "Query2doc (lexical channel): few-shot (k = 4) prompt an LLM to write a pseudo-document answering the query; form q' = concat(q repeated 5 times, pseudo_doc); run BM25/SPLADE on q'. HyDE (dense channel): prompt an instruction-following LLM 'Write a passage that answers: {q}' N times (temperature > 0), embed each generated passage with the document encoder, average the N vectors (optionally with the real query embedding as an N+1th vector), and search the dense index with the averaged vector. Gate both behind a router that fires only when (a) the query is short/ambiguous, (b) first-stage top score dispersion is low, or (c) the task decomposer flags an exploratory sub-question; cache expansions by normalized query string.",
+   "source_titles": [
+    "Precise Zero-Shot Dense Retrieval without Relevance Labels (HyDE)",
+    "Query2doc: Query Expansion with Large Language Models",
+    "Unsupervised Dense Information Retrieval with Contrastive Learning (Contriever)"
+   ],
+   "when_to_use": "Zero-shot or new-domain deployments with no fine-tuned retriever (HyDE: DL19 nDCG@10 44.5 -> 61.3 over Contriever, Recall@1k 88.0 beating fine-tuned models; Query2doc: BM25 DL19 51.2 -> 66.2). Not worth it on top of a strong distilled dense retriever (Query2doc gains shrink to +0.4-0.8 MRR).",
+   "tradeoffs": ">2,000 ms LLM latency vs 16 ms BM25 (Query2doc), ~$55k for 550k calls; hallucinated expansions can steer retrieval toward plausible-but-wrong content, especially for proprietary identifiers the LLM has never seen; HyDE's instruction may be under-specified for some domains (FiQA, DBPedia underperformed Contriever-FT).",
+   "default_parameters": "Query2doc: k = 4 few-shot examples, query repeated 5x, pseudo-doc <= 128 tokens. HyDE: N = 4-8 hypothetical documents (paper leaves N unspecified; averaging requires N > 1), include the query embedding as an extra vector, temperature 0.7, small fast model. Cache TTL hours-days keyed on normalized query; router threshold: fire when top-1/top-10 fused-score ratio < 1.2 or query length < 6 tokens."
+  },
+  {
+   "name": "Index-time enrichment: contextual chunk headers and filtered generative expansion",
+   "description": "At ingestion, for each chunk, call an LLM with the (prompt-cached) full parent document and the chunk, asking for a 50-100-token statement situating the chunk (document title, section, entity, time period, product/revision); prepend it to the chunk text used for both the embedding and the BM25/SPLADE index while keeping the raw chunk for display. Optionally also generate 3-10 synthetic queries per chunk (doc2query) and append them to the lexical field, but first score each (query, chunk) pair with a cross-encoder and drop those below a relevance threshold (Doc2Query--). Store provenance (generator model, prompt version) so enrichment can be regenerated when models change.",
+   "source_titles": [
+    "Introducing Contextual Retrieval",
+    "Document Expansion by Query Prediction (doc2query)",
+    "Doc2Query--: When Less is More",
+    "Dense Passage Retrieval for Open-Domain Question Answering"
+   ],
+   "when_to_use": "Corpora where chunks lose meaning without their parent (specifications with numbered clauses, tables, incident timelines, BOM rows, code functions without file/module context). Anthropic: top-20 failure rate 5.7% -> 2.9% with contextual embeddings + contextual BM25; Doc2Query--: up to +16% effectiveness, -23% query time, -33% index size vs unfiltered expansion.",
+   "tradeoffs": "One-time LLM cost (~$1.02 per million document tokens with prompt caching for 800-token chunks); re-ingestion needed when prompts/models change; unfiltered generation injects hallucinated terms (Doc2Query--).",
+   "default_parameters": "Chunk 200-800 tokens (Anthropic used 800 in cost estimate; Chroma/Qu et al. favour 200-400 for precision), context 50-100 tokens, small/fast LLM with prompt caching; doc2query 5 queries per chunk, keep only those with cross-encoder P(relevant) >= 0.5 (or top 70% by score); always prefix the document title (DPR)."
+  },
+  {
+   "name": "Chunking and multi-granularity indexing with parent-child references",
+   "description": "Split documents with a recursive, boundary-aware splitter (section headings -> paragraphs -> sentences) targeting a token budget, no or minimal overlap. Store each chunk with parent_doc_id, section_path, ordinal, char offsets, and structured metadata. Optionally build a finer child index (sentences or LLM-extracted propositions) whose hits are mapped back to the parent chunk returned to the generator ('small-to-big'). Treat chunk size, overlap, and granularity as per-collection configuration tied to the embedding model version. Evaluate with token-level IoU/recall against span-labelled queries.",
+   "source_titles": [
+    "Evaluating Chunking Strategies for Retrieval",
+    "Is Semantic Chunking Worth the Computational Cost?",
+    "Dense X Retrieval: What Retrieval Granularity Should We Use?",
+    "Sparse, Dense, and Attentional Representations for Text Retrieval"
+   ],
+   "when_to_use": "Every corpus; proposition/sentence child indexes when queries target specific facts in dense technical prose (Dense X: Recall@5 +9.3 for Contriever, QA EM +2.7 to +4.1 at fixed token budget); semantic chunkers only for multi-topic concatenated documents (Qu et al.).",
+   "tradeoffs": "Smaller chunks improve precision/IoU but lower recall per chunk and multiply index size (propositions ~6x passages); overlap adds redundant tokens the generator pays for; semantic/LLM chunking is slow (seconds to tens of minutes per corpus in Chroma's tests) with inconsistent gains.",
+   "default_parameters": "RecursiveCharacterTextSplitter at 200-400 tokens, overlap 0 (Chroma: 200/0 gave recall 88.1, precision 7.0; 400/0 recall 89.5; 800/400 worst IoU); overlap 10-25% only with small-context embedders (all-MiniLM preferred 250/125); return the parent chunk or a 2-3 chunk window around hits; max 5-20 chunks to the generator."
+  },
+  {
+   "name": "Metadata-filtered hybrid retrieval and structured-record serialization",
+   "description": "Attach structured metadata to every chunk (project, system/component, document type, revision/version, date, severity, author/team, language, file path, standard clause id). Translate the task prompt's constraints into filters (via the task decomposition/planner step or a small schema-guided LLM call) and push them into each channel: inverted-index filter clauses for BM25/SPLADE; filtered HNSW (ACORN-style predicate-aware traversal, or the vector DB's native pre-filter) for dense; apply the same filter to late-interaction candidates. For record-like sources (BOM lines, incident tickets, test results) serialize to ordered 'key: value' text with the most discriminative fields first before embedding and reranking, and keep the raw record for display.",
+   "source_titles": [
+    "ACORN: Performant and Predicate-Agnostic Search Over Vector Embeddings and Structured Data",
+    "Reranking Best Practices - Cohere documentation",
+    "The Probabilistic Relevance Framework: BM25 and Beyond"
+   ],
+   "when_to_use": "Any engineering corpus: queries are routinely scoped ('in release 4.2', 'for the hydraulic subsystem', 'incidents last quarter'); multi-tenant or access-controlled deployments where filtering is a security boundary.",
+   "tradeoffs": "Post-filtering the top-k of an unfiltered ANN search collapses recall for selective predicates; pre-filtering with naive HNSW can disconnect the graph; ACORN or pre-filter+brute-force fallbacks fix this at some index/maintenance cost. Serialization order matters because rerankers truncate long records.",
+   "default_parameters": "Pre-filter when predicate selectivity < ~10% of the collection (fall back to brute-force scan over the filtered set when it is < ~10k vectors); ACORN reports 2-1,000x throughput at fixed recall vs prior methods. Keep records under the reranker window (512 tokens BERT-class; 4,093 Cohere v3) with 5-8 priority fields first; always include a human-readable title line."
+  },
+  {
+   "name": "BEIR-style evaluation harness with regression gates",
+   "description": "Build an in-domain golden set: 100-500 queries sampled from real logs plus task-decomposer-generated sub-questions, with graded relevance judgments (0-3) over pooled results from all channels and the reranker (depth 20-50) judged by domain experts, optionally pre-labelled by an LLM judge and verified. Compute nDCG@10, Recall@{20,100,1000}, MRR@10 per channel, per fusion setting and end-to-end, with paired significance tests. Store results per (index version, model registry version, fusion params). Run as CI: fail if nDCG@10 drops > 1 point or Recall@100 drops > 2 points relative to the pinned baseline. Also track latency p50/p95 and cost per 1k queries per stage.",
+   "source_titles": [
+    "BEIR: A Heterogenous Benchmark for Zero-shot Evaluation of Information Retrieval Models",
+    "MTEB: Massive Text Embedding Benchmark",
+    "Pyserini: An Easy-to-Use Python Toolkit to Support Replicable IR Research with Sparse and Dense Representations",
+    "Cumulated Gain-Based Evaluation of IR Techniques",
+    "CoIR: A Comprehensive Benchmark for Code Information Retrieval Models"
+   ],
+   "when_to_use": "Before every model swap, fusion-parameter change, chunking change or index rebuild; mandatory for choosing alpha/k and reranker depth.",
+   "tradeoffs": "Judgment collection is the main cost; pooled judgments bias toward systems in the pool (re-judge new systems' unjudged top-k); LLM judges correlate with but do not replace expert labels on specialized engineering content.",
+   "default_parameters": "nDCG@10 primary; Recall@100 for first-stage headroom; MRR@10 for single-answer tasks; pool depth 20 per system; graded 4-point scale (Järvelin & Kekäläinen); >= 100 queries for stable alpha fitting (Bruch: <5% of data suffices); regression tolerance 1.0 nDCG@10 point; report BM25 baseline alongside every hybrid result (Ma et al.)."
+  }
+ ],
+ "architecture_recommendations": [
+  "1. Structure the component as a declarative retrieval plan executed by a cascade: Planner (LLM, reads the natural-language task prompt and collection schema; emits a RetrievalPlan JSON: sub-queries, target collections, metadata filters, channels to run, fusion method, reranker tier, k values, output format) -> Channel executors (BM25/BM25F, SPLADE, dense ANN, optional ColBERTv2/PLAID) run in parallel -> Fusion (RRF | convex combination) -> Reranker tier(s) (cross-encoder, then optional listwise LLM on top-30) -> Context assembler (ordering, dedup, parent expansion, XML packaging). Every stage has the same interface: List[Candidate{chunk_id, parent_id, text, metadata, per_channel_scores, fused_score, rerank_score, provenance}].",
+  "2. Make the planner's reasoning explicit and auditable: it must justify channel selection (e.g. 'query contains identifier ERR-1203 -> weight lexical 0.6', 'exploratory question -> enable HyDE'), choose k per stage from a latency/cost budget passed in by the caller, and emit the plan before execution so the pipeline (and humans) can inspect, cache, or override it. Fall back to a fixed default plan (BM25 + dense, RRF k=60, cross-encoder top-100 -> 20) when the planner fails or the budget is tight.",
+  "3. Define a Retriever adapter interface (index(chunks), search(query_repr, k, filter) -> scored list, capabilities(): {returns_scores, score_range, supports_filter, supports_batch}) and implement adapters for Lucene/Elasticsearch/OpenSearch (BM25, ELSER/SPLADE), FAISS/hnswlib/Qdrant/Weaviate/pgvector (dense), and the ColBERT/PLAID engine. The fusion layer reads capabilities() to decide whether convex combination is possible (needs comparable scores) or RRF is required.",
+  "4. Keep a versioned Model Registry (embedding model id, query/document prefixes or instructions, dimension, max tokens, normalization; reranker id, max doc tokens, calibrated threshold; SPLADE checkpoint; LLM reranker and prompt version). Index metadata records which registry version produced it; any mismatch triggers an asynchronous re-embed job rather than silently mixing embedding spaces (MTEB: no model dominates, so swaps will happen).",
+  "5. Ingestion pipeline as a configurable DAG per collection: parse -> structure-aware chunking (200-400 tokens, 0 overlap default; per-collection override) -> contextual header generation (50-100 tokens, prompt-cached parent) -> optional filtered doc2query -> metadata extraction/validation against a collection schema -> multi-channel indexing (lexical fields, sparse vectors, dense vectors, optional multi-vectors) -> golden-set re-evaluation. Store raw text, enriched text, and parent/child links separately so display, embedding, and lexical fields can diverge.",
+  "6. Fusion module exposes: method (rrf|cc), rrf_k (60), window (max(size,100); 1000 for no-rerank), cc_alpha (0.7), cc_normalizer (theoretical_minmax|minmax|zscore), per-channel weights, dedup_key (chunk_id), parent_collapse (max|sum|none). Provide a calibrate(dev_set) routine that grid-searches alpha/weights (step 0.05) and k1/b for BM25, stores results per collection, and refuses to transfer tuned RRF constants across collections (Bruch et al.).",
+  "7. Reranking as tiers with budgets: Tier 1 cross-encoder/monoT5 over the fused top-100-150 (truncate docs to model window; context header first); Tier 2 optional listwise LLM (RankZephyr on-prem or API model) over Tier-1 top-20-30 with window 20 / stride 10; each tier declares expected latency and cost so the planner can select tiers under the caller's budget. Emit calibrated relevance scores and a per-collection threshold (30-50 borderline pairs) so downstream stages can detect 'nothing relevant found' instead of hallucinating from weak context.",
+  "8. Context assembly must be position-aware (Lost in the Middle): order passages by rerank score, place the strongest first (and optionally mirror the second strongest last), cap at 5-20 passages or a token budget, expand children to parents / neighbouring chunks when the generator needs continuity, and package as <documents><document index><source/><metadata/><document_content/></document></documents> placed before the question, with an option to request quote extraction first (Anthropic guidance).",
+  "9. Push metadata filters into every channel (inverted-index clauses, filtered HNSW such as ACORN or vendor pre-filter, candidate filtering for late interaction), never post-filter the fused top-k; enforce tenant/ACL filters as mandatory server-side constraints that the planner cannot remove.",
+  "10. Query-side enhancements are pluggable 'query transforms' with a router: spelling/identifier normalization (always), acronym expansion from a company glossary (always, cheap), HyDE / Query2doc (gated by ambiguity or low first-stage score dispersion, cached), multi-query decomposition (delegated to the Task Decomposition model). Each transform records what it changed for provenance.",
+  "11. Corpus-size router: if the filtered collection is under ~200k tokens, bypass retrieval and hand the whole corpus to the generator with prompt caching (Anthropic); for mid-size, hybrid without reranker; for large, full cascade.",
+  "12. Observability: log per stage latency, candidate counts, score distributions, channel agreement (overlap of top-k between channels is a useful drift signal), fused vs reranked rank changes, filter selectivity, cache hit rates, and cost; sample queries with low reranker max score for human review and golden-set growth.",
+  "13. Evaluation is a first-class subsystem: BEIR-format datasets per collection (corpus.jsonl, queries.jsonl, qrels.tsv), nightly runs of nDCG@10/Recall@100/MRR@10 per channel and end-to-end, CI regression gates (1.0 nDCG@10 point), code-retrieval sets (CoIR/CodeSearchNet subsets) for repositories, plus a token-level chunking evaluation (IoU) when chunking changes.",
+  "14. Deployment profiles: 'cpu-only on-prem' (BM25 + SPLADE or small dense model + MiniLM cross-encoder; PLAID on CPU if multi-vector), 'gpu' (adds ColBERTv2, monoT5-3B/bge-reranker-large, RankZephyr), 'api' (hosted embeddings + Cohere/LLM rerankers); the same plan schema runs on all, only the registry differs. Secure engineering data by preferring on-prem rerankers (RankZephyr) when confidentiality is required.",
+  "15. Expose the component to the wider pipeline via a single call retrieve(task_prompt | explicit_queries, collections, budget{latency_ms, max_cost}, filters, output{k, format}) returning candidates with provenance and the executed plan, so the Pipeline RAG, Task Decomposition, Verification, Parallelization and Caching models can compose it without knowing internals."
+ ],
+ "pitfalls": [
+  "Dense-only retrieval out of domain underperforms BM25: on BEIR, DPR averaged -47.7% nDCG@10 vs BM25 and beat it on only 1 of 18 datasets; ANCE -7.4%, TAS-B -2.8% (Thakur et al. 2021). Mitigation: always keep a lexical channel in the fusion and evaluate on an in-domain golden set before deployment.",
+  "Under-tuned BM25 baselines hide or fake hybrid gains: the original DPR paper under-reported BM25 (NQ top-20 59.1 vs 62.9 when tuned) and found hybrid did not help on NQ, while the replication with grid-searched fusion weights found +3.2 points (Ma et al. 2021). Mitigation: tune k1/b and the fusion weight on a dev set; log the BM25 baseline alongside every hybrid result.",
+  "Tuned RRF constants do not transfer: constants tuned on MS MARCO improved it (0.425 -> 0.451) but degraded HotpotQA (0.675 -> 0.621) (Bruch et al. 2023). Mitigation: keep k = 60 unless re-tuned per collection; prefer convex combination with theoretical min-max normalization when labelled queries exist.",
+  "Position bias in the generator: with 20 retrieved documents GPT-3.5-Turbo accuracy fell from 75.8% (gold first) to 53.8% (gold in the middle), below its 56.1% closed-book score; beyond 20 documents only ~1.5% is gained (Liu et al., Lost in the Middle). Mitigation: rerank, place the best passages first, cap passages at 5-20, and consider quote extraction before answering.",
+  "Single-vector embeddings saturate on long documents: required dimension grows with document length and normalized margins shrink to ~1e-5 for long BM25-style matching (Luan et al. 2021). Mitigation: short chunks (200-400 tokens), parent/child indexing, or multi-vector / learned-sparse channels for long technical passages.",
+  "Hallucinated generative expansion pollutes the index: unfiltered doc2query adds queries not grounded in the passage; filtering with a relevance model gave up to +16% effectiveness, -23% query time, -33% index size (Gospodinov et al., Doc2Query--). Mitigation: cross-encoder filter every synthetic query/summary before indexing; monitor filtered-out samples.",
+  "LLM query expansion is slow and expensive and helps strong dense retrievers little: Query2doc costs >2,000 ms per query vs 16 ms BM25 and ~$55k for 550k calls, with gains shrinking to +0.4-0.8 MRR on distilled dense models (Wang et al. 2023). Mitigation: gate behind a router, cache by normalized query, apply mainly to the lexical channel, repeat the original query 5x to prevent drift.",
+  "LLM listwise reranking at full depth is impractical online: ~11-32 s and $0.04-$0.60 per query for 100 passages, total $556 for the GPT-4 experiments (Sun et al., RankGPT). Mitigation: cheap reranker first, LLM only over top-20-30 (one-fifth the cost), distil into a 435M cross-encoder (BEIR 53.03 > monoT5-3B 51.36), or use RankZephyr on-prem.",
+  "Chunking defaults are often wrong: the common 800-token/400-overlap setting had the worst token-level IoU (1.5) in Chroma's benchmark; semantic chunking gave inconsistent gains and lost to fixed-size on natural documents (HotpotQA 90.6 vs 87.4) (Qu et al. 2024; Chroma 2024). Mitigation: default 200-400 tokens, zero overlap, recursive boundary-aware splitting; evaluate chunking with token-level metrics before adopting semantic chunkers.",
+  "Missing or wrong embedding prefixes/instructions: E5 and BGE are trained with asymmetric 'query:'/'passage:' prefixes or query instructions; omitting them degrades retrieval (Wang et al. 2022; Xiao et al. 2023). Mitigation: encode prefix schemes in the model registry and apply automatically.",
+  "Post-filtering vector search collapses recall for selective metadata predicates and naive pre-filtering disconnects HNSW graphs (Patel et al., ACORN). Mitigation: predicate-aware traversal (ACORN) or vendor pre-filtering with brute-force fallback for small filtered sets.",
+  "Reranker truncation and non-comparable scores: cross-encoders see only the first 512 tokens (BERT-class) or 4,093 tokens (Cohere v3) and their scores are query-dependent, so a fixed global threshold misfires (Cohere best practices). Mitigation: put the contextual header/title first, chunk long records, and calibrate thresholds with 30-50 borderline pairs per domain.",
+  "Leaderboard overfitting: MTEB's own conclusion is that no embedding model dominates across tasks (Muennighoff et al.), and most retrievers/rerankers are trained on MS MARCO web queries (Bajaj et al.), so leaderboard rank does not predict performance on specifications, logs or code (CoIR finds code retrieval hard even for SOTA models). Mitigation: in-domain golden sets, code-specific evaluation, and fine-tuning with mined hard negatives.",
+  "Index footprint surprises with multi-vector models: uncompressed ColBERT needs 154-286 GiB for 8.8M passages; even ColBERTv2 needs 16-25 GiB (Khattab & Zaharia 2020; Santhanam et al. 2022). Mitigation: budget ~36 bytes per token embedding, use 2-bit residuals and PLAID, and restrict multi-vector indexing to collections that need it."
+ ],
+ "evaluation_metrics": [
+  "nDCG@10 (primary ranking-quality metric; graded relevance; BEIR/MTEB/TREC DL standard; Järvelin & Kekäläinen 2002)",
+  "Recall@k for k in {20, 100, 1000} (first-stage and fused-pool headroom before reranking; Contriever/HyDE show recall and nDCG can diverge)",
+  "MRR@10 (single-correct-passage tasks; MS MARCO dev standard)",
+  "Top-k retrieval accuracy / Success@k (answer-bearing passage in top-k; DPR/LoTTE convention) and retrieval failure rate at top-20 (Anthropic contextual retrieval metric)",
+  "Token-level recall, precision and IoU of retrieved chunks against labelled evidence spans (Chroma chunking evaluation) for chunking decisions",
+  "Channel agreement / overlap@k between lexical and dense lists (drift and complementarity diagnostic) and per-channel contribution to the final top-k",
+  "Reranker calibration: score distribution on borderline pairs, precision at the chosen relevance threshold, and 'no relevant result' detection rate",
+  "Downstream task metrics with retrieval held fixed vs varied: answer EM/F1 or rubric score at fixed token budget (Dense X, Lost in the Middle protocol), faithfulness/citation accuracy",
+  "Latency p50/p95 per stage (first-stage, fusion, rerank tiers) and end-to-end; throughput (queries/s) per deployment profile",
+  "Cost per 1,000 queries per stage (embedding, LLM expansion, LLM reranking) and one-time indexing cost per million document tokens",
+  "Index size (GB) and build time per channel; re-embedding time on model change",
+  "Statistical significance (paired t-test or bootstrap) of nDCG@10 differences on >= 100 queries, with regression gates in CI (e.g. 1.0 nDCG@10 point tolerance)"
+ ],
+ "engineering_adaptation_notes": [
+  "Source code and repositories: treat code as text for the dense channel (GTE beat prior code retrievers of similar size without code fine-tuning) but add an identifier-aware lexical analyzer (camelCase/snake_case splitting, keep full symbol names) so BM25/SPLADE match function names, error strings and config keys exactly; chunk by syntactic unit (function/class) with file path and module docstring as the contextual header; evaluate on CoIR and CodeSearchNet-style query sets; mine (docstring, function) pairs for in-domain fine-tuning.",
+  "Specifications, standards and requirements documents: chunk by clause/requirement ID and keep the numbering, section path and document revision in both the contextual header and metadata; weight the lexical channel higher (alpha ~0.5-0.6) because clause identifiers, units and defined terms must match exactly; use ColBERTv2/PLAID or SPLADE++ for long dense clauses where single vectors saturate (Luan et al.); support traceability queries by indexing cross-references as metadata and allowing filter 'cites: REQ-123'.",
+  "Incident reports and postmortems: fields (severity, service, start/end time, root cause category) become filters and ordered key:value text for the reranker; time-range filters must be pushed into the index (ACORN/pre-filter); enable HyDE for exploratory 'has anything like this happened before' queries, but cache results; use LLM listwise reranking offline to build labelled similar-incident sets that train a cheaper cross-encoder.",
+  "Test logs and CI output: high-volume, repetitive, identifier-dense text favours BM25/SPLADE with aggressive deduplication (hash identical stack frames) and parent/child indexing (child = individual error block, parent = run summary); use contextual headers with build id, commit, test name; dense retrieval helps mainly for natural-language failure descriptions, so keep alpha low (~0.3-0.4) and calibrate per collection.",
+  "CAD/BOM metadata and part catalogues: records are structured, so serialize to YAML-like 'part_number: ..., description: ..., material: ..., supplier: ...' with discriminative fields first (Cohere guidance), index part numbers with an exact-match analyzer, use metadata filters for assembly/revision, and expect BM25/SPLADE to dominate; dense embeddings add value for free-text descriptions and cross-lingual supplier names.",
+  "Multi-source engineering queries (e.g. 'which requirements are affected by incident INC-4821 in release 4.2') require the planner to emit several sub-queries against different collections with different channel weights and filters, then a cross-collection fusion keyed by parent document; the Task Decomposition model supplies the sub-queries and the Pipeline RAG model consumes the merged, position-ordered context.",
+  "Confidentiality and on-prem constraints: prefer open models for every stage (BM25, SPLADE++, E5/BGE/GTE embedders, ColBERTv2/PLAID, bge-reranker or monoT5, RankZephyr 7B) so no engineering data leaves the network; the 'cpu-only' profile (BM25 + SPLADE + MiniLM cross-encoder, PLAID on CPU) is viable per BEIR and PLAID latency numbers.",
+  "Document-level context loss is acute in engineering corpora (a table row or a clause means nothing without its heading), so contextual chunk headers (Anthropic) and title prefixes (DPR) are not optional; measure the top-20 failure rate before and after enrichment on the in-domain golden set.",
+  "Golden sets should be built from real engineer queries plus task-decomposer sub-questions, with graded judgments from domain experts; LLM judges can pre-label but specialized content (units, tolerances, standard clause semantics) needs human verification; include 'no relevant document exists' queries to test threshold calibration and abstention."
+ ],
+ "composition_notes": [
+  "Task Decomposition -> Hybrid Retrieval: the decomposer turns a complex task prompt into sub-questions, each with inferred filters and collection targets; the retriever's planner consumes these as explicit queries (skipping its own query analysis), runs them in parallel, and returns per-sub-question candidate sets plus a cross-sub-question fused set keyed by parent document. Multi-query decomposition also substitutes for LLM query expansion in many cases, so the router should disable HyDE/Query2doc when the decomposer already produced diverse sub-queries.",
+  "Parallelization -> Hybrid Retrieval: channel execution (BM25, SPLADE, dense, ColBERT), per-sub-query retrieval, reranker batching (score 100 pairs in one forward pass; sliding windows of 20 for listwise), and HyDE's N generations are all embarrassingly parallel; the parallelization model should schedule them with the planner's latency budget, and fusion/reranking act as the join points. Index-time enrichment (contextual headers, doc2query, embedding) is a batch map job.",
+  "Caching -> Hybrid Retrieval: cache at four levels: (1) embedding cache keyed by (model version, text hash) to avoid re-encoding repeated queries/chunks; (2) LLM expansion cache (HyDE/Query2doc outputs) keyed by normalized query; (3) fused-candidate cache keyed by (plan hash, filters, index version) with short TTL; (4) reranker score cache keyed by (reranker version, query hash, chunk id). Prompt caching of the full parent document makes contextual chunk headers affordable (~$1.02 per million tokens). Any model-registry or index-version change must invalidate the corresponding cache tier.",
+  "Answer Verification -> Hybrid Retrieval: the retriever returns calibrated relevance scores, provenance and exact spans so the verifier can check that each claim is grounded in a retrieved passage (quote extraction, as recommended in Anthropic's long-context guidance); low max-rerank-score results should trigger the verifier to flag 'insufficient evidence' instead of answering; the verifier can also issue follow-up retrieval calls (retrieve-verify-retrieve loop) and its failures become hard negatives/new golden-set queries for calibration.",
+  "Pipeline RAG -> Hybrid Retrieval: the RAG orchestrator owns the generator prompt and consumes the retriever's position-ordered, XML-packaged context (best passages first, 5-20 passages, documents before the question); it should pass the generator's token budget to the planner so k and chunk expansion are sized accordingly, and implement the corpus-size router (under ~200k tokens: whole-corpus prompt with caching instead of retrieval).",
+  "Prompting best practices: the planner and the listwise reranker are prompt-driven LLM calls, so they should use structured outputs (JSON plan, permutation strings), few-shot examples drawn from the collection, temperature 0, and versioned prompts in the model registry; retrieved documents go at the top of the generator prompt with the query at the end (up to 30% quality gain reported by Anthropic), wrapped in tagged <document> blocks with source metadata for citation.",
+  "Evaluation across components: retrieval metrics (nDCG@10, Recall@100) must be reported alongside end-task metrics with retrieval held fixed, because reader accuracy saturates before retriever recall (Lost in the Middle); the verification model's grounding checks double as weak relevance labels, and the caching model's hit rates feed the cost model that the planner uses to choose reranker tiers.",
+  "Architecture principle shared with all components: every stage is a pure function over a typed Candidate list with provenance, declared cost/latency, and a version; this lets the orchestrator reorder, parallelize, cache and A/B stages without code changes, which is the same contract the other five models should implement."
+ ],
+ "_status": "DRAFT: pre-critique, pre-verification. Replaced by verified dossier when the research workflow completes."
+}

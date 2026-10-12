@@ -1,0 +1,516 @@
+{
+ "concept": "Cross-cutting: Pipeline Architecture and Efficiency (compound AI systems, routing, cascades, agent patterns, observability, failure taxonomy)",
+ "summary": "The field has converged on the view, articulated by Zaharia et al. (BAIR, Feb 2024), that state-of-the-art results come from compound AI systems rather than single model calls: pipelines of LLM calls, retrievers, tools, verifiers and classical code, where system design is cheaper and faster to iterate than scaling training (their coding example: tripling training budget might lift success 30% to 35%, while a sampling-and-filtering system design reaches ~80%). The practical pattern vocabulary is now stable and shared across Anthropic's \"Building Effective Agents\" (prompt chaining, routing, parallelization via sectioning/voting, orchestrator-workers, evaluator-optimizer, and autonomous tool-loop agents only when step count is unpredictable), Andrew Ng's four agentic patterns (reflection, tool use, planning, multi-agent collaboration; GPT-3.5 in an agentic loop reaching 95.1% HumanEval vs 67.0% zero-shot GPT-4), and CoALA's cognitive-architecture framing (working/episodic/semantic/procedural memory; internal retrieval/reasoning/learning actions and external grounding; a propose-evaluate-select-execute decision cycle). Efficiency is attacked at three layers: (1) routing and cascading across models of different cost (FrugalGPT up to 98% cost reduction matching GPT-4; RouteLLM 3.66x cost saving at 95% of GPT-4 quality on MT Bench; AutoMix >50% cost reduction via self-verification + POMDP router; Hybrid LLM up to 40% fewer large-model calls at no quality loss); (2) programmatic optimization of the pipeline itself rather than hand-written prompts (DSPy compiles declarative modules, +25%/+65% over few-shot for GPT-3.5/llama2-13b; Trace generalizes this to any heterogeneous workflow via OPTO); (3) serving-level efficiency (vLLM PagedAttention 2-4x throughput; SGLang RadixAttention and compressed FSMs up to 6.4x throughput on multi-call programs), surveyed systematically by Wan et al. (model/data/framework-centric) and Zhou et al. (data/model/system-level).\n\nThe counterweight to this enthusiasm is a maturing evidence base on how compound systems fail and how to evaluate them honestly. Cemri et al. (MAST, NeurIPS 2025 D&B) found 41-86.7% failure rates across seven open-source multi-agent frameworks and taxonomized 14 failure modes into system-design issues (~44%), inter-agent misalignment (~32%) and task-verification failures (~24%), with targeted fixes (role specification, a final verification step) yielding +9.4% to +15.6% success. Kapoor et al. (AI Agents That Matter, TMLR 2025) showed that simple baselines (retry, warming, escalation) sit on the cost-accuracy Pareto frontier for HumanEval while complex agents like LATS cost ~55x more for lower accuracy, and that most agent benchmarks lack adequate holdouts. Anthropic's own production data (multi-agent research system) shows agents use ~4x and multi-agent systems ~15x the tokens of chat, justifying orchestration only for high-value parallelizable work. Production-grade implementations therefore pair the pattern library with classical reliability engineering (randomized exponential backoff, retry budgets, deadline propagation, circuit breakers and bulkheads from Google SRE and Nygard), standardized tracing (OpenTelemetry GenAI semantic conventions: gen_ai.* spans, token counters, duration/TTFT histograms, agent/workflow/tool spans), and layered guardrails (Llama Guard input/output classification, NeMo Guardrails programmable rails, Anthropic Constitutional Classifiers at 23.7% inference overhead and +0.38% refusals).",
+ "papers": [
+  {
+   "title": "The Shift from Models to Compound AI Systems",
+   "authors": "Matei Zaharia, Omar Khattab, Lingjiao Chen, Jared Quincy Davis, Heather Miller, Chris Potts, James Zou, Michael Carbin, Jonathan Frankle, Naveen Rao, Ali Ghodsi",
+   "year": 2024,
+   "venue": "BAIR Blog (UC Berkeley), Feb 18 2024",
+   "url": "https://bair.berkeley.edu/blog/2024/02/18/compound-ai-systems/",
+   "arxiv_id": "",
+   "citation_signal": "Field-defining essay by Databricks/Berkeley leadership (Zaharia, Khattab, Potts, Zou, Frankle); 'compound AI systems' became standard terminology; widely cited in systems and agents literature.",
+   "key_contribution": "Argues that SOTA increasingly comes from systems composed of multiple models, retrievers, tools and code, not monolithic models. Evidence cited: AlphaCode 2 generates up to 1M candidates and reaches 85th percentile of human contestants; Medprompt (GPT-4 + retrieval + CoT + ensembling of up to 11 solutions) exceeded GPT-4 medical-exam accuracy by 9%; Gemini CoT@32 scored 90.04% MMLU vs 86.4% for GPT-4 5-shot; FrugalGPT cuts cost up to 90% at equal quality. Databricks data: ~60% of LLM apps use RAG and ~30% use multi-step chains. Identifies three open problems: the design space (allocating latency/cost budgets, e.g. 20 ms retriever + 80 ms LLM in a 100 ms budget), end-to-end optimization across non-differentiable components, and operation (trace monitoring, DataOps, new security risks).",
+   "design_implication": "Treat the pipeline as the unit of design and optimization, not the model: expose every component (model choice, retriever, sampling count, verifier) as a configurable parameter with an explicit latency and cost budget allocation. Build trace-level monitoring from day one because the authors name operation/observability as a first-class open problem. Favor design iteration (sampling, filtering, verification) over waiting for a bigger model."
+  },
+  {
+   "title": "Building Effective Agents",
+   "authors": "Erik Schluntz, Barry Zhang (Anthropic)",
+   "year": 2024,
+   "venue": "Anthropic research/engineering publication, Dec 19 2024",
+   "url": "https://www.anthropic.com/research/building-effective-agents",
+   "arxiv_id": "",
+   "citation_signal": "De facto industry reference for agentic workflow patterns; its pattern names (prompt chaining, routing, parallelization, orchestrator-workers, evaluator-optimizer) are adopted across frameworks and vendor docs.",
+   "key_contribution": "Distinguishes workflows (LLMs and tools orchestrated through predefined code paths) from agents (LLM directs its own process and tool use in a loop with environmental feedback). Defines five workflow patterns: prompt chaining (sequential steps with programmatic gates, trading latency for accuracy), routing (classify then dispatch to a specialized prompt/model), parallelization (sectioning for independent subtasks; voting for diverse outputs), orchestrator-workers (central LLM dynamically decomposes and delegates, then synthesizes), evaluator-optimizer (generate/critique loop). Recommends agents only for open-ended problems with unpredictable step counts, with sandboxing and guardrails because errors compound. Core principles: start simplest, add complexity only when it measurably helps; make planning explicit; invest in agent-computer interface (tool) design as much as in UX (e.g. requiring absolute file paths eliminated a class of errors).",
+   "design_implication": "Implement the component as a library of these five composable workflow primitives plus an optional bounded agent loop, selected by an explicit planning step. Default to deterministic workflows and only escalate to autonomous loops when the task's step count cannot be predicted. Make tool schemas, descriptions and error messages part of the engineered surface (poka-yoke the tool interface), and log the plan so humans can audit it."
+  },
+  {
+   "title": "How we built our multi-agent research system",
+   "authors": "Jeremy Hadfield, Barry Zhang, Kenneth Lien, Florian Scholz, Jeremy Fox, Daniel Ford (Anthropic)",
+   "year": 2025,
+   "venue": "Anthropic Engineering blog",
+   "url": "https://www.anthropic.com/engineering/multi-agent-research-system",
+   "arxiv_id": "",
+   "citation_signal": "Production engineering account from a frontier lab; one of the few public sources with quantified token-cost multipliers for agents vs multi-agent systems.",
+   "key_contribution": "Describes a production orchestrator-worker system: a lead agent plans, spawns 3-5 subagents in parallel, each issuing 3+ parallel tool calls, with a separate CitationAgent. Claude Opus 4 lead + Sonnet 4 subagents beat single-agent Opus 4 by 90.2% on an internal research eval. Token usage explained ~80% of performance variance on BrowseComp. Agents use ~4x the tokens of chat and multi-agent systems ~15x. Parallelization cut research time up to 90% on complex queries. Effort-scaling heuristics: simple fact-finding = 1 agent, 3-10 tool calls; comparisons = 2-4 subagents, 10-15 calls each; complex research = 10+ subagents. Uses rainbow deployments for long-running stateful agents, LLM-as-judge with a 0-1 rubric (factual accuracy, citation accuracy, completeness, source quality, tool efficiency), and ~20 representative queries for early evals.",
+   "design_implication": "Encode explicit effort-scaling rules in the planner (number of workers and tool-call budget as a function of estimated task complexity) rather than letting the orchestrator spawn freely. Budget for ~15x chat token cost when choosing multi-agent execution and gate it on task value and parallelizability. Deploy long-running pipelines with rainbow/blue-green cutover so in-flight runs are not disrupted, and start evaluation with a small curated query set plus a rubric-based LLM judge."
+  },
+  {
+   "title": "Agentic Design Patterns Part 1 (How Agents Can Improve LLM Performance)",
+   "authors": "Andrew Ng",
+   "year": 2024,
+   "venue": "The Batch, DeepLearning.AI, Mar 20 2024",
+   "url": "https://www.deeplearning.ai/the-batch/how-agents-can-improve-llm-performance/",
+   "arxiv_id": "",
+   "citation_signal": "Widely circulated framing from a leading AI educator; the four-pattern taxonomy (Reflection, Tool use, Planning, Multi-agent collaboration) is referenced across industry curricula and frameworks.",
+   "key_contribution": "Introduces four agentic design patterns: Reflection (LLM critiques and improves its own output), Tool use (search, code execution, APIs), Planning (multi-step plan toward a goal), Multi-agent collaboration (role-divided agents that debate/divide work). Cites HumanEval: GPT-3.5 zero-shot 48.1%, GPT-4 zero-shot 67.0%, GPT-3.5 wrapped in an agentic iterative loop up to 95.1%, concluding that the workflow upgrade exceeds the model upgrade.",
+   "design_implication": "Reflection and iteration loops are often a cheaper lever than a bigger model: the component should support a reflect-and-revise mode on a smaller model before escalating to a more expensive one. Treat the four patterns as orthogonal switches in configuration (reflection on/off, tools allowed, planning depth, number of roles)."
+  },
+  {
+   "title": "FrugalGPT: How to Use Large Language Models While Reducing Cost and Improving Performance",
+   "authors": "Lingjiao Chen, Matei Zaharia, James Zou",
+   "year": 2023,
+   "venue": "arXiv preprint (Stanford)",
+   "url": "https://arxiv.org/abs/2305.05176",
+   "arxiv_id": "2305.05176",
+   "citation_signal": "Foundational LLM-cascade paper; cited by RouteLLM, AutoMix, Hybrid LLM and the compound-AI essay; widely adopted in commercial LLM gateways (e.g. Portkey implements it).",
+   "key_contribution": "Observes API prices differ by ~two orders of magnitude and proposes three cost-reduction strategies: prompt adaptation, LLM approximation (caching/fine-tuning cheaper substitutes), and LLM cascade. FrugalGPT, a learned cascade that picks which LLMs to query in sequence and a scoring function to decide when to stop, matches GPT-4 performance with up to 98% cost reduction, or improves accuracy over GPT-4 by 4% at the same cost.",
+   "design_implication": "Implement a cascade: order candidate models by cost, call the cheapest first, score the answer with a lightweight learned or heuristic scorer, and return when score exceeds a threshold tuned on a validation set against a budget. Keep prompt adaptation (trim few-shot examples, batch queries) and approximation (cache, distilled model) as separate configurable stages."
+  },
+  {
+   "title": "RouteLLM: Learning to Route LLMs with Preference Data",
+   "authors": "Isaac Ong, Amjad Almahairi, Vincent Wu, Wei-Lin Chiang, Tianhao Wu, Joseph E. Gonzalez, M Waleed Kadous, Ion Stoica",
+   "year": 2024,
+   "venue": "ICLR 2025 (proceedings title: 'Learning to Route LLMs from Preference Data'); arXiv June 2024",
+   "url": "https://arxiv.org/abs/2406.18665",
+   "arxiv_id": "2406.18665",
+   "citation_signal": "ICLR 2025 main conference; open-source RouteLLM framework from LMSYS/Berkeley is widely used; benchmarked against commercial routers (Martian, Unify).",
+   "key_contribution": "Trains binary routers between a strong and weak model on ~65k Chatbot Arena pairwise preferences (64 models in 10 tiers), augmented with ~1.5k MMLU golden-labeled questions and ~120k GPT-4-judged Nectar samples (~$700). Four routers: similarity-weighted ranking, matrix factorization, BERT classifier, causal-LLM classifier. Metrics: PGR (performance gap recovered), APGR, and CPT (fraction of strong-model calls to hit a quality target). On MT Bench the best router reaches 95% of GPT-4 quality at CPT(50%) with a 3.66x cost saving; up to 75% fewer GPT-4 calls than random routing; 1.41x saving on MMLU (92% quality) and 1.49x on GSM8K (87%). Matches commercial routers with up to 40% fewer GPT-4 calls; routers transfer when the strong/weak pair is swapped.",
+   "design_implication": "Use a preference-trained router (matrix factorization is cheap and strong) with a tunable threshold that maps directly to a cost/quality target; report PGR/CPT rather than raw accuracy. Augment preference data with a small in-domain golden set (on the order of 1-2k labeled items) to adapt to engineering domains. Design the router model-pair-agnostic so model upgrades do not require retraining."
+  },
+  {
+   "title": "AutoMix: Automatically Mixing Language Models",
+   "authors": "Pranjal Aggarwal, Aman Madaan, Ankit Anand, et al., Mausam",
+   "year": 2023,
+   "venue": "NeurIPS 2024; arXiv Oct 2023",
+   "url": "https://arxiv.org/abs/2310.12963",
+   "arxiv_id": "2310.12963",
+   "citation_signal": "NeurIPS 2024 main track; frequently cited alongside FrugalGPT/RouteLLM as the canonical self-verification-based cascade.",
+   "key_contribution": "Routes from a small to a large model based on few-shot self-verification of the small model's answer (no training), then a POMDP-based router that treats the noisy verification signal as a partial observation of correctness. Evaluated on five LLMs and five datasets; consistently beats baselines and reduces compute cost by over 50% at comparable performance.",
+   "design_implication": "When no preference data exists, bootstrap routing with self-verification: ask the cheap model to verify its own answer k times and treat the agreement rate as a noisy confidence; use a POMDP/threshold policy to decide escalation. Model verification noise explicitly instead of trusting a single self-judgment."
+  },
+  {
+   "title": "Hybrid LLM: Cost-Efficient and Quality-Aware Query Routing",
+   "authors": "Dujian Ding, Ankur Mallick, Chi Wang, Robert Sim, Subhabrata Mukherjee, Victor Ruhle, Laks V.S. Lakshmanan, Ahmed Hassan Awadallah",
+   "year": 2024,
+   "venue": "ICLR 2024 (main conference)",
+   "url": "https://arxiv.org/abs/2404.14618",
+   "arxiv_id": "2404.14618",
+   "citation_signal": "ICLR 2024 main conference, Microsoft Research; standard reference for difficulty-aware edge/cloud routing.",
+   "key_contribution": "A router predicts query difficulty and routes to a small (edge) or large (cloud) model subject to a desired quality level that can be tuned at test time. Achieves up to 40% fewer calls to the large model with no drop in response quality.",
+   "design_implication": "Expose a runtime 'quality level' knob so operators can trade cost for quality per tenant or per task without redeploying; train the difficulty predictor on quality-gap labels (large minus small model quality) rather than absolute correctness."
+  },
+  {
+   "title": "DSPy: Compiling Declarative Language Model Calls into Self-Improving Pipelines",
+   "authors": "Omar Khattab, Arnav Singhvi, Paridhi Maheshwari, et al., Matei Zaharia, Christopher Potts",
+   "year": 2023,
+   "venue": "ICLR 2024 (proceedings title '...into State-of-the-Art Pipelines'); arXiv Oct 2023",
+   "url": "https://arxiv.org/abs/2310.03714",
+   "arxiv_id": "2310.03714",
+   "citation_signal": "~1,093 citations (Semantic Scholar, Oct 2026); ICLR 2024; DSPy is a widely adopted open-source framework (Stanford NLP/Databricks).",
+   "key_contribution": "Abstracts LM pipelines as text-transformation graphs of declarative, parameterized modules (signatures + modules such as ChainOfThought, ReAct) and a compiler that bootstraps demonstrations/finetunes to maximize a metric. Self-bootstrapped pipelines beat standard few-shot prompting by >25% (GPT-3.5) and >65% (llama2-13b-chat), and beat expert-written demonstrations by 5-46% and 16-40% respectively; compiled 770M T5 and llama2-13b programs are competitive with expert GPT-3.5 chains; compilation takes minutes. Headline: simple programs raised from 33% to 82% (math) and 32% to 46% (multi-hop QA) for GPT-3.5.",
+   "design_implication": "Separate the pipeline's structure (modules and signatures) from its prompt parameters, and treat prompts/demos as compiled artifacts regenerated per domain and per model from a small labeled set plus a metric. This is the mechanism that makes a component 'task-agnostic': swap the signature and metric, recompile, keep the architecture."
+  },
+  {
+   "title": "Trace is the Next AutoDiff: Generative Optimization with Rich Feedback, Execution Traces, and LLMs",
+   "authors": "Ching-An Cheng, Allen Nie, Adith Swaminathan",
+   "year": 2024,
+   "venue": "NeurIPS 2024; arXiv June 2024",
+   "url": "https://arxiv.org/abs/2406.16218",
+   "arxiv_id": "2406.16218",
+   "citation_signal": "NeurIPS 2024 (Semantic Scholar venue), ~79 citations; Microsoft Research open-source Trace library.",
+   "key_contribution": "Formalizes Optimization with Trace Oracle (OPTO): an optimizer receives the workflow's execution trace plus feedback on the output and updates heterogeneous parameters (prompts, code, hyperparameters). Traces play the role of back-propagated gradients. The Trace library exposes PyTorch-like syntax; OptoPrime, an LLM-based optimizer, is reported competitive with specialized optimizers across numerical optimization, prompt optimization, hyperparameter tuning, robot control and code debugging.",
+   "design_implication": "Record structured execution traces (inputs, intermediate outputs, tool results, errors) for every run, not only for debugging but as the substrate for automatic optimization of prompts and glue code. Design node parameters (prompts, thresholds, code snippets) as declared trainable objects so an optimizer can rewrite them from traces and evaluator feedback."
+  },
+  {
+   "title": "LangGraph Graph API (StateGraph, reducers, Send, Command, persistence)",
+   "authors": "LangChain Inc.",
+   "year": 2025,
+   "venue": "Official LangGraph documentation",
+   "url": "https://docs.langchain.com/oss/python/langgraph/graph-api",
+   "arxiv_id": "",
+   "citation_signal": "Dominant open-source orchestration framework for stateful agent graphs; documents the reference state-graph execution model used in production by many companies.",
+   "key_contribution": "Defines agent workflows as StateGraphs: a typed State with per-key reducers (default replace; operator.add or add_messages to accumulate), Nodes (functions returning partial updates), normal and conditional Edges, Send for dynamic fan-out/map-reduce, Command to combine state update and routing (including resume after interrupt), checkpointers that persist state at super-step boundaries, and a recursion limit (default 1000 super-steps as of 1.0.6). Execution is Pregel-inspired message passing in discrete super-steps; nodes with multiple outgoing edges run in parallel; on resume the interrupted node re-runs from the start, so nodes must be idempotent. Supports node-level caching with TTL.",
+   "design_implication": "Model the component's control flow as an explicit typed state graph with reducers, conditional routing and checkpointing, not as ad hoc Python. Make every node idempotent (resume re-executes it), cap super-steps with a recursion limit, use Send for data-dependent parallel fan-out, and persist state so long-running runs survive restarts and support human-in-the-loop interrupts."
+  },
+  {
+   "title": "Cognitive Architectures for Language Agents (CoALA)",
+   "authors": "Theodore R. Sumers, Shunyu Yao, Karthik Narasimhan, Thomas L. Griffiths",
+   "year": 2023,
+   "venue": "TMLR (camera-ready v3, Mar 2024); arXiv Sept 2023",
+   "url": "https://arxiv.org/abs/2309.02427",
+   "arxiv_id": "2309.02427",
+   "citation_signal": "TMLR; several hundred citations; the standard conceptual framework for organizing agent memory, actions and decision loops.",
+   "key_contribution": "Proposes a cognitive architecture for language agents: working memory (current cycle's inputs, reasoning, goals, persists across LLM calls), long-term memory split into episodic (past trajectories), semantic (world/self knowledge) and procedural (LLM weights + agent code); an action space of internal actions (retrieval reads LTM into WM, reasoning reads/writes WM via the LLM, learning writes LTM) and external grounding actions (physical, human/agent dialogue, digital APIs); and a decision cycle of planning (propose, evaluate, select) then execution and observation. Maps ReAct (no LTM, fixed reason-act), Reflexion (semantic reflections), Voyager (procedural skill library), Generative Agents (episodic+semantic), Tree of Thoughts (propose/evaluate/select search) onto the framework.",
+   "design_implication": "Structure the component's state and memory per CoALA: an explicit working-memory object, pluggable episodic (run logs), semantic (domain knowledge base) and procedural (prompts/tools/code) stores, and a propose-evaluate-select loop as the planner. This gives a principled slot for retrieval (hybrid retrieval component), learning (caching/DSPy compilation) and verification (evaluate step)."
+  },
+  {
+   "title": "AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation",
+   "authors": "Qingyun Wu, Gagan Bansal, Jieyu Zhang, et al., Chi Wang",
+   "year": 2023,
+   "venue": "COLM 2024; Best Paper at ICLR 2024 LLM Agents Workshop; arXiv Aug 2023",
+   "url": "https://arxiv.org/abs/2308.08155",
+   "arxiv_id": "2308.08155",
+   "citation_signal": "~2,873 citations (Semantic Scholar, Oct 2026); COLM 2024; Microsoft open-source framework (AutoGen/AG2) with very large adoption.",
+   "key_contribution": "Introduces conversable agents (LLM, human and tool-backed) and conversation programming: interaction patterns defined in natural language and code, enabling two-agent, group-chat and hierarchical topologies. Demonstrated on math, coding, QA, operations research, online decision-making and entertainment.",
+   "design_implication": "If multi-agent execution is used, define agent roles and the conversation topology declaratively and keep a human-proxy agent as an optional participant for approvals. Note that MAST (Cemri et al.) measured high failure rates in AG2-style group chats, so pair any conversation pattern with termination conditions and a verification agent."
+  },
+  {
+   "title": "MetaGPT: Meta Programming for A Multi-Agent Collaborative Framework",
+   "authors": "Sirui Hong, Mingchen Zhuge, Jiaqi Chen, et al., Chenglin Wu, Jürgen Schmidhuber",
+   "year": 2023,
+   "venue": "ICLR 2024 (oral); arXiv Aug 2023",
+   "url": "https://arxiv.org/abs/2308.00352",
+   "arxiv_id": "2308.00352",
+   "citation_signal": "ICLR 2024 oral (top ~1.2%); very widely starred open-source framework; canonical SOP-based multi-agent design.",
+   "key_contribution": "Encodes human Standardized Operating Procedures into role prompts (Product Manager, Architect, Project Manager, Engineer, QA Engineer) with structured intermediate artifacts (PRDs, designs, task lists) that downstream roles check, in an assembly-line paradigm, to combat cascading hallucinations from naive LLM chaining. Reports 85.9% HumanEval and 87.7% MBPP pass@1 (GPT-4 backbone); executable feedback (Engineer writes/runs unit tests, debugs, max 3 retries) adds +4.2 HumanEval and +5.4 MBPP points. On SoftwareDev: executability 3.75/4 vs ChatDev 2.25, human revision cost 0.83 vs 2.5, but ~31k tokens vs ~19k. Four-role team costs $1.385/task vs $0.915 single engineer and produces 191 vs 83 lines.",
+   "design_implication": "Prefer structured, schema-validated intermediate artifacts (specs, task lists, test results) over free-form chat between stages; each stage should validate its input artifact. Bound self-repair loops (3 retries is the literature default) and treat executable feedback (tests, compilers, linters) as the highest-value verifier for engineering workloads."
+  },
+  {
+   "title": "Why Do Multi-Agent LLM Systems Fail?",
+   "authors": "Mert Cemri, Melissa Z. Pan, Shuyi Yang, et al., Matei Zaharia, Joseph E. Gonzalez, Ion Stoica",
+   "year": 2025,
+   "venue": "NeurIPS 2025 Datasets and Benchmarks track; arXiv Mar 2025 (v3 Oct 2025)",
+   "url": "https://arxiv.org/abs/2503.13657",
+   "arxiv_id": "2503.13657",
+   "citation_signal": "NeurIPS 2025 D&B; first empirically grounded failure taxonomy (MAST) for multi-agent LLM systems, rapidly adopted as the reference taxonomy.",
+   "key_contribution": "Analyzes 1,600+ annotated traces (MAST-Data) from seven frameworks (MetaGPT, ChatDev, HyperAgent, AppWorld, AG2/MathChat, Magentic-One, OpenManus) with failure rates 41%-86.7%. Taxonomy built from 150 traces (inter-annotator kappa 0.88) yields 14 failure modes in 3 categories: System Design Issues (disobey task spec 11.8%, disobey role spec 1.5%, step repetition 15.7%, loss of conversation history 2.8%, unaware of termination 12.4%; ~44% total), Inter-Agent Misalignment (conversation reset 2.2%, fail to ask clarification 6.8%, task derailment 7.4%, information withholding 0.85%, ignored input 1.9%, reasoning-action mismatch 13.2%; ~32%), Task Verification (premature termination 6.2%, no/incomplete verification 8.2%, incorrect verification 9.1%; ~24%). LLM-as-judge (few-shot o1) reaches 94% accuracy, kappa 0.77. Interventions: improved role specs and CEO-final-say topology each +9.4% on ChatDev; adding high-level task-objective verification +15.6% on ProgramDev.",
+   "design_implication": "Instrument the pipeline to detect MAST modes at runtime: step-repetition and loop detectors, explicit termination conditions, conversation-history integrity checks, reasoning/action consistency checks, and a mandatory final verification stage against the original task objective (the single highest-yield intervention). Use the 14 modes as the label set for an automated trace-judge in CI."
+  },
+  {
+   "title": "AI Agents That Matter",
+   "authors": "Sayash Kapoor, Benedikt Stroebl, Zachary S. Siegel, Nitya Nadgir, Arvind Narayanan",
+   "year": 2024,
+   "venue": "TMLR 2025; arXiv July 2024",
+   "url": "https://arxiv.org/abs/2407.01502",
+   "arxiv_id": "2407.01502",
+   "citation_signal": "TMLR 2025 (Princeton); highly influential critique that reshaped agent benchmarking norms (cost-controlled evaluation, holdouts).",
+   "key_contribution": "Shows accuracy-only evaluation produces needlessly complex, costly agents. On HumanEval (mean of 5 runs, Apr 2024): LATS (GPT-4) 88.0% at $134.50 vs simple Warming baseline 93.2% at $2.45 and Retry 92.0% at $2.51; Escalation 85.0% at $0.27; GPT-4 zero-shot 89.6% at $1.93. Joint accuracy-cost optimization of DSPy on HotPotQA cut variable cost 53% (GPT-3.5) and 41% (Llama-3-70B) at maintained accuracy, breaking even after ~1,300 tasks. Of 17 benchmarks surveyed, 7 have no holdout; reproducibility problems (removed tasks, hardcoded policies, STeP WebArena 35.8% relying on hardcoded task policies). SWE-Agent's $4/task cap implies >$8,000 per SWE-bench run. Prescribes cost-controlled evaluation, Pareto frontiers, holdouts matched to the generality level, separate benchmarks for model vs downstream developers, standardized reproducible evaluation.",
+   "design_implication": "Always evaluate pipeline configurations on a cost-accuracy Pareto frontier and include trivially simple baselines (retry with temperature, warming, model escalation) as mandatory comparators before adopting any complex agent pattern. Maintain held-out task sets at the appropriate generality level to prevent the planner/prompts from overfitting to the dev set."
+  },
+  {
+   "title": "Efficient Large Language Models: A Survey",
+   "authors": "Zhongwei Wan, Xin Wang, Che Liu, et al., Mosharaf Chowdhury, Mi Zhang",
+   "year": 2023,
+   "venue": "TMLR (camera-ready v4, May 2024); arXiv Dec 2023",
+   "url": "https://arxiv.org/abs/2312.03863",
+   "arxiv_id": "2312.03863",
+   "citation_signal": "TMLR; several hundred citations; maintained companion GitHub repository widely used as the efficiency reading list.",
+   "key_contribution": "Systematic taxonomy of LLM efficiency research into model-centric (compression, quantization, pruning, efficient architectures, KD), data-centric (data selection, prompt engineering for efficiency) and framework-centric (training/serving systems) methods, with a continuously updated repository.",
+   "design_implication": "Use the three-axis taxonomy as the checklist for the component's efficiency configuration: model-level choices (quantized/distilled models for cheap tiers of a cascade), data-level choices (prompt compression, few-shot trimming), and framework-level choices (serving engine with prefix caching and batching)."
+  },
+  {
+   "title": "A Survey on Efficient Inference for Large Language Models",
+   "authors": "Zixuan Zhou, Xuefei Ning, Ke Hong, et al., Yu Wang",
+   "year": 2024,
+   "venue": "arXiv (v3 July 2024), Tsinghua/Infinigence",
+   "url": "https://arxiv.org/abs/2404.14294",
+   "arxiv_id": "2404.14294",
+   "citation_signal": "Widely cited inference-efficiency survey (hundreds of citations) with comparative experiments across representative methods.",
+   "key_contribution": "Identifies three root causes of inference inefficiency (model size, quadratic attention, autoregressive decoding) and organizes methods into data-level (input compression, output organization), model-level (efficient structures, compression) and system-level (serving engine, scheduling, memory) optimization, with experiments comparing representative techniques and lessons learned.",
+   "design_implication": "Optimize at the system level first for a pipeline component (batching, KV/prefix caching, speculative decoding where available), then data level (shorter prompts, structured outputs), then model level; measure each layer's effect on TTFT and tokens/sec with the OTel GenAI metrics."
+  },
+  {
+   "title": "Efficient Memory Management for Large Language Model Serving with PagedAttention",
+   "authors": "Woosuk Kwon, Zhuohan Li, Siyuan Zhuang, Ying Sheng, Lianmin Zheng, Cody Hao Yu, Joseph E. Gonzalez, Hao Zhang, Ion Stoica",
+   "year": 2023,
+   "venue": "SOSP 2023",
+   "url": "https://arxiv.org/abs/2309.06180",
+   "arxiv_id": "2309.06180",
+   "citation_signal": "~9,002 citations (Semantic Scholar, Oct 2026); SOSP 2023; vLLM is the dominant open-source LLM serving engine.",
+   "key_contribution": "PagedAttention manages KV cache in non-contiguous blocks like virtual memory paging, achieving near-zero KV-cache waste and enabling sharing across requests; vLLM improves throughput 2-4x at equal latency vs FasterTransformer and Orca, with larger gains for longer sequences, bigger models and complex decoding (e.g., parallel sampling).",
+   "design_implication": "When self-hosting cheap cascade tiers or voting/sampling stages, run them on a paged-KV serving engine; parallel sampling (self-consistency, best-of-n) is exactly the workload where KV sharing yields the largest savings."
+  },
+  {
+   "title": "SGLang: Efficient Execution of Structured Language Model Programs",
+   "authors": "Lianmin Zheng, Liangsheng Yin, Zhiqiang Xie, et al., Clark Barrett, Ying Sheng",
+   "year": 2024,
+   "venue": "NeurIPS 2024 (main track); arXiv Dec 2023",
+   "url": "https://arxiv.org/abs/2312.07104",
+   "arxiv_id": "2312.07104",
+   "citation_signal": "NeurIPS 2024; ranked among most influential NeurIPS 2024 papers by Paper Digest; SGLang runtime widely deployed.",
+   "key_contribution": "Co-designs a frontend language (generation and parallelism primitives for multi-call LM programs) with a runtime using RadixAttention (automatic KV-cache reuse across calls sharing prefixes, stored in a radix tree) and compressed finite-state machines for fast constrained/JSON decoding; up to 6.4x higher throughput on agent control, logical reasoning, JSON decoding and multi-turn chat.",
+   "design_implication": "Structure prompts so the shared system/task prefix comes first and varies last (maximizes prefix-cache hits across pipeline steps and parallel branches), and use grammar/JSON-constrained decoding for inter-stage artifacts so parsing failures disappear and decoding is faster."
+  },
+  {
+   "title": "Large Language Monkeys: Scaling Inference Compute with Repeated Sampling",
+   "authors": "Bradley Brown, Jordan Juravsky, Ryan Ehrlich, Ronald Clark, Quoc V. Le, Christopher Ré, Azalia Mirhoseini",
+   "year": 2024,
+   "venue": "arXiv (v3 Dec 2024), Stanford/Oxford/DeepMind",
+   "url": "https://arxiv.org/abs/2407.21787",
+   "arxiv_id": "2407.21787",
+   "citation_signal": "Highly cited inference-scaling paper (hundreds of citations) that established coverage scaling laws for repeated sampling.",
+   "key_contribution": "Coverage (fraction of problems solved by at least one sample) scales log-linearly with sample count over four orders of magnitude, modeled by an exponentiated power law. On SWE-bench Lite, DeepSeek-Coder-V2-Instruct rises from 15.9% (1 sample) to 56% (250 samples), beating the 43% single-sample SOTA. Without automatic verifiers, majority voting and reward models plateau beyond several hundred samples.",
+   "design_implication": "Parallel repeated sampling is a first-class efficiency lever only when a cheap automatic verifier exists (tests, compilers, schema checks, simulators); for unverifiable tasks cap voting at tens of samples because gains plateau. Make 'samples x verifier' a budgeted configuration in the parallelization component."
+  },
+  {
+   "title": "ReAct: Synergizing Reasoning and Acting in Language Models",
+   "authors": "Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan, Yuan Cao",
+   "year": 2022,
+   "venue": "ICLR 2023",
+   "url": "https://arxiv.org/abs/2210.03629",
+   "arxiv_id": "2210.03629",
+   "citation_signal": "Foundational agent-loop paper (thousands of citations); the reason-act-observe loop underlies most tool-using agents.",
+   "key_contribution": "Interleaves reasoning traces with actions so the model can plan, query tools (Wikipedia API) and incorporate observations; reduces hallucination and error propagation vs chain-of-thought alone on HotpotQA/Fever and beats imitation/RL methods by +34% absolute success on ALFWorld and +10% on WebShop.",
+   "design_implication": "The bounded agent loop in the component should be ReAct-shaped (thought, action, observation) with structured action schemas, a max-step cap, and every observation logged as a span; CoALA shows ReAct has no long-term memory, so add retrieval/caching around it."
+  },
+  {
+   "title": "Self-Consistency Improves Chain of Thought Reasoning in Language Models",
+   "authors": "Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed Chi, Sharan Narang, Aakanksha Chowdhery, Denny Zhou",
+   "year": 2022,
+   "venue": "ICLR 2023",
+   "url": "https://arxiv.org/abs/2203.11171",
+   "arxiv_id": "2203.11171",
+   "citation_signal": "Foundational inference-time ensembling paper (thousands of citations); the 'voting' half of Anthropic's parallelization pattern.",
+   "key_contribution": "Samples multiple diverse reasoning paths and marginalizes by majority vote over final answers; gains of +17.9% GSM8K, +11.0% SVAMP, +12.2% AQuA, +6.4% StrategyQA, +3.9% ARC-challenge over greedy CoT.",
+   "design_implication": "Implement voting as a configurable parallel branch (n samples at temperature > 0, answer normalization, majority or weighted vote) for tasks with a discrete final answer; combine with a cascade so voting on a cheap model is tried before escalating to an expensive one."
+  },
+  {
+   "title": "OpenTelemetry Semantic Conventions for Generative AI (spans, agent spans, metrics, token metrics)",
+   "authors": "OpenTelemetry GenAI SIG (CNCF)",
+   "year": 2025,
+   "venue": "OpenTelemetry specification repository (open-telemetry/semantic-conventions-genai), status: Development",
+   "url": "https://github.com/open-telemetry/semantic-conventions-genai",
+   "arxiv_id": "",
+   "citation_signal": "Vendor-neutral industry standard under CNCF; implemented by OpenAI/Anthropic/Bedrock/Azure instrumentations and observability vendors; MCP conventions included.",
+   "key_contribution": "Defines gen_ai.* attributes and signals: required gen_ai.operation.name (chat, embeddings, execute_tool, create_agent, invoke_agent, invoke_workflow, plan, retrieval, memory), gen_ai.provider.name, gen_ai.request.model / gen_ai.response.model, gen_ai.conversation.id, gen_ai.response.finish_reasons, error.type (Stable), server.address/port; opt-in (off by default) content attributes gen_ai.input.messages / gen_ai.output.messages / gen_ai.system_instructions / gen_ai.tool.definitions because they may contain PII. Span names: 'execute_tool {gen_ai.tool.name}', 'invoke_agent {gen_ai.agent.name}', 'invoke_workflow {gen_ai.workflow.name}', 'plan {gen_ai.agent.name}'. Metrics: gen_ai.client.operation.duration and gen_ai.server.request.duration histograms (s; buckets 0.01 ... 81.92 doubling), gen_ai.server.time_to_first_token (buckets 0.001 ... 10.0), gen_ai.server.time_per_output_token (0.01 ... 2.5); token counters gen_ai.client.inference.usage.{input_tokens,output_tokens,cache_read.input_tokens,cache_write.input_tokens,reasoning.output_tokens} with gen_ai.token.modality, and per-operation token histograms (buckets 1, 4, 16 ... 67,108,864 x4).",
+   "design_implication": "Adopt these conventions verbatim for every LLM call, tool call, agent invocation and workflow in the component so traces are portable across vendors; emit cache_read/cache_write token counters to measure the caching component, and keep prompt/response content opt-in with redaction. Use the standardized histogram buckets so dashboards and SLOs are comparable across teams."
+  },
+  {
+   "title": "Addressing Cascading Failures (Site Reliability Engineering: How Google Runs Production Systems, Ch. 22)",
+   "authors": "Mike Ulrich (ed. Betsy Beyer, Chris Jones, Jennifer Petoff, Niall Richard Murphy)",
+   "year": 2016,
+   "venue": "O'Reilly / Google SRE Book (free online)",
+   "url": "https://sre.google/sre-book/addressing-cascading-failures/",
+   "arxiv_id": "",
+   "citation_signal": "Canonical reliability reference used industry-wide; basis for retry/backoff/load-shedding practice in most RPC frameworks.",
+   "key_contribution": "Prescribes randomized exponential backoff for all retries, a per-request retry cap (never retry indefinitely; naive 10-attempt retries shown to destabilize), a server-wide retry budget (example: 60 retries/minute/process, fail when exceeded), avoiding retry amplification across layers (4 attempts at each of 3 layers = 64 backend attempts), classifying retriable vs non-retriable errors with a distinct overload status, load shedding (reject early with 503, LIFO/CoDel queues), graceful degradation (cheaper algorithm or cached subset), and deadline propagation with cancellation down the call tree.",
+   "design_implication": "Wrap every model/tool call in a retry policy with randomized exponential backoff, a small per-call attempt cap, a global retry budget, and error classification (rate-limit/timeout retriable; 4xx validation and guardrail blocks not). Propagate a single end-to-end deadline and remaining budget through the pipeline graph so nested stages do not retry independently, and define degraded modes (smaller model, cached answer, skip optional stage) rather than failing outright."
+  },
+  {
+   "title": "Release It! Design and Deploy Production-Ready Software, 2nd Edition",
+   "authors": "Michael T. Nygard",
+   "year": 2018,
+   "venue": "Pragmatic Bookshelf (book, 378 pp.)",
+   "url": "https://www.oreilly.com/library/view/release-it-2nd/9781680504552/f_0049.xhtml",
+   "arxiv_id": "",
+   "citation_signal": "Origin of the Circuit Breaker and Bulkhead stability patterns adopted by Netflix Hystrix, Resilience4j, Polly, Envoy and most service meshes.",
+   "key_contribution": "Defines stability patterns and antipatterns for distributed systems: Timeouts, Circuit Breaker (closed/open/half-open states that stop calling a failing dependency and probe for recovery), Bulkheads (isolate resource pools per dependency so one failure cannot exhaust shared capacity), Steady State, Fail Fast, Handshaking, Decoupling Middleware, and Shed Load; antipatterns include Integration Points, Chain Reactions, Cascading Failures, Blocked Threads and Slow Responses.",
+   "design_implication": "Put a circuit breaker in front of each model provider, tool and retriever with a fallback route (alternate provider or cheaper tier) when open; bulkhead concurrency per provider and per tenant so one slow dependency or noisy tenant cannot starve the pipeline; fail fast on invalid inputs before spending tokens."
+  },
+  {
+   "title": "NeMo Guardrails: A Toolkit for Controllable and Safe LLM Applications with Programmable Rails",
+   "authors": "Traian Rebedea, Razvan Dinu, Makesh Sreedhar, Christopher Parisien, Jonathan Cohen (NVIDIA)",
+   "year": 2023,
+   "venue": "EMNLP 2023 (System Demonstrations)",
+   "url": "https://arxiv.org/abs/2310.10501",
+   "arxiv_id": "2310.10501",
+   "citation_signal": "EMNLP 2023 demo; widely adopted open-source guardrail runtime from NVIDIA.",
+   "key_contribution": "Open-source toolkit adding programmable, interpretable, model-independent rails at runtime (rather than via alignment training), using a dialogue-management-inspired runtime; rails control topics, dialogue paths and style and work across multiple LLM providers.",
+   "design_implication": "Implement guardrails as a separate, declaratively configured runtime layer (input rails, output rails, tool/execution rails) that is independent of the model so model swaps in a cascade/router do not change policy behavior; make rails versioned configuration, per domain."
+  },
+  {
+   "title": "Llama Guard: LLM-based Input-Output Safeguard for Human-AI Conversations",
+   "authors": "Hakan Inan, Kartikeya Upasani, Jianfeng Chi, et al., Madian Khabsa (Meta)",
+   "year": 2023,
+   "venue": "arXiv Dec 2023 (Meta AI); open-weights release",
+   "url": "https://arxiv.org/abs/2312.06674",
+   "arxiv_id": "2312.06674",
+   "citation_signal": "~1,425 citations (Semantic Scholar, Oct 2026); open weights widely deployed; successors Llama Guard 2/3/4.",
+   "key_contribution": "Llama2-7b fine-tuned on 13,997 annotated prompt/response examples (3:1 train/eval) to classify both user prompts and model responses against a 6-category taxonomy (Violence & Hate, Sexual Content, Guns & Illegal Weapons, Regulated Substances, Suicide & Self-Harm, Criminal Planning) with customizable taxonomy via instruction tuning and zero/few-shot prompting. AUPRC: 0.847 on OpenAI Moderation eval (OpenAI API 0.856, Perspective 0.787; few-shot 0.872), 0.626 on ToxicChat (OpenAI 0.588, Perspective 0.532); on its own test set 0.945 prompt / 0.953 response vs OpenAI 0.764 / 0.769.",
+   "design_implication": "Run a small classifier on both inputs and outputs (two policy variants, same model) as the first and last stages of the pipeline; because taxonomy is prompt-customizable, define domain-specific categories (e.g., export-controlled specifications, safety-critical instructions, PII in incident reports) without retraining."
+  },
+  {
+   "title": "Constitutional Classifiers: Defending against Universal Jailbreaks across Thousands of Hours of Red Teaming",
+   "authors": "Mrinank Sharma et al. (43 authors, Anthropic)",
+   "year": 2025,
+   "venue": "arXiv Jan 2025 (Anthropic)",
+   "url": "https://arxiv.org/abs/2501.18837",
+   "arxiv_id": "2501.18837",
+   "citation_signal": "Frontier-lab production safety system with >3,000 hours of red teaming; deployed on Claude models.",
+   "key_contribution": "Trains input/output classifiers on synthetic data generated from a natural-language constitution of permitted/restricted content. Across >3,000 estimated hours of red teaming, no participant found a universal jailbreak extracting comparable detail to an unguarded model across most target queries; enhanced classifiers defended against held-out domain-specific jailbreaks with a 0.38% absolute increase in production refusals and 23.7% inference overhead.",
+   "design_implication": "Budget roughly 20-25% latency/compute overhead for a classifier-based safety layer and track false-refusal rate as an SLO (target well under 1% absolute). Generate classifier training data from a written policy ('constitution') so domain policies for engineering data (e.g., ITAR, safety-critical procedures) can be expressed and regenerated declaratively."
+  }
+ ],
+ "techniques": [
+  {
+   "name": "Cost-aware LLM cascade with learned stopping scorer (FrugalGPT-style)",
+   "description": "Order K candidate models by cost c_1 < c_2 < ... < c_K. For a query q: call model 1, obtain answer a_1; compute score s_1 = g(q, a_1) from a lightweight scorer g (a small regression/classifier model, DistilBERT-class, trained on (query, answer, correct?) tuples; or a self-verification agreement rate when no training data exists). If s_1 >= tau_1, return a_1; else call model 2 and repeat. Thresholds tau_i are chosen on a validation set to maximize accuracy subject to an expected-cost budget B (grid search over tau vectors; FrugalGPT learns both the model ordering and thresholds). Log which tier answered for later router training.",
+   "source_titles": [
+    "FrugalGPT: How to Use Large Language Models While Reducing Cost and Improving Performance",
+    "AutoMix: Automatically Mixing Language Models",
+    "AI Agents That Matter"
+   ],
+   "when_to_use": "High-volume, latency-tolerant workloads with a mix of easy and hard queries (classification, extraction, Q&A over engineering docs) where a cheap model answers most queries acceptably; when a validation set with correctness labels (or an automatic verifier) exists.",
+   "tradeoffs": "Worst-case latency is the sum of all tiers (mitigate with a 2-3 tier cap and early-exit timeouts). Scorer miscalibration leaks wrong cheap answers (false accepts) or wastes money (false rejects). Needs re-tuning when models or price lists change. Kapoor et al. show plain 'escalation' already reaches 85% HumanEval at $0.27 vs $1.93 for zero-shot GPT-4, so even untrained cascades pay off.",
+   "default_parameters": "2-3 tiers (FrugalGPT experiments and Kapoor's escalation baseline use small chains); scorer threshold tuned to hit the target accuracy on a held-out validation set at budget B (FrugalGPT reports up to 98% cost reduction at GPT-4-matching accuracy, so start with budget = 10-20% of all-strong cost and relax); scorer retrained whenever model lineup changes; hard cap on cumulative cascade latency equal to the single strong-model p95."
+  },
+  {
+   "name": "Preference-trained binary router with quality-target threshold (RouteLLM / Hybrid LLM)",
+   "description": "Train a router r(q) in [0,1] predicting P(strong model wins | q) from pairwise preference data (human battles plus LLM-judged augmentation). RouteLLM's matrix-factorization router learns a query embedding and per-model latent vectors so that score = v_strong^T e(q) - v_weak^T e(q); the BERT/causal-LLM variants fine-tune classifiers on the same labels. At inference, route to the strong model iff r(q) > alpha. Calibrate alpha on a validation set to achieve a target PGR (performance gap recovered = (score_router - score_weak)/(score_strong - score_weak)) or CPT (fraction of strong calls to reach that PGR). Hybrid LLM instead trains on the predicted quality gap and exposes the quality level as a runtime knob.",
+   "source_titles": [
+    "RouteLLM: Learning to Route LLMs with Preference Data",
+    "Hybrid LLM: Cost-Efficient and Quality-Aware Query Routing"
+   ],
+   "when_to_use": "When latency matters (single call, no sequential cascade), when preference or quality-gap labels are available, and when the strong/weak pair changes over time (RouteLLM routers transfer across model pairs).",
+   "tradeoffs": "Requires tens of thousands of preference labels for general routing (RouteLLM: ~65k Arena battles) but adapts with ~1-2k in-domain golden labels; a single wrong routing is unrecoverable without a verifier (combine with cascade fallback). Routers trained on chat preferences may not reflect engineering-task difficulty without augmentation.",
+   "default_parameters": "Matrix-factorization router as the default (cheap, strong in RouteLLM); threshold alpha set to the operating point reaching 95% of strong-model quality (RouteLLM: 3.66x cost saving on MT Bench at CPT 50%, i.e. roughly half of queries to the strong model); augment with ~1.5k in-domain golden-labeled queries and optionally ~100k LLM-judged pairs (~$700 at 2024 prices); monitor routed fraction and PGR weekly; Hybrid-LLM style quality knob exposed per tenant (expect up to 40% fewer strong calls at no quality loss)."
+  },
+  {
+   "name": "Self-verification confidence with POMDP escalation (AutoMix)",
+   "description": "After the cheap model answers, prompt the same cheap model with a few-shot verification template ('Is the answer consistent with the context and task? yes/no') k times at temperature T, yielding verification probability p = (#yes)/k as a noisy observation of correctness. Treat the hidden state (answer correct or not) as a POMDP: maintain belief b over correctness given p, and choose action in {return, escalate to next model} by maximizing expected utility = performance - lambda * cost, with lambda tuned to the cost budget. Optionally include a third model tier. No model training is needed; the POMDP policy parameters are fit on a small validation set.",
+   "source_titles": [
+    "AutoMix: Automatically Mixing Language Models",
+    "Large Language Monkeys: Scaling Inference Compute with Repeated Sampling"
+   ],
+   "when_to_use": "Cold start with no routing data; context-grounded tasks (RAG answers over specs, log analysis) where verification against provided context is feasible; when the cost of k verification samples on the cheap model is far below one strong-model call.",
+   "tradeoffs": "Self-verification is noisy and correlated with the generator's own blind spots; adds k cheap calls of latency (parallelizable). AutoMix reports >50% compute reduction at comparable performance across 5 datasets, but gains shrink when cheap and strong models are close in quality.",
+   "default_parameters": "k = 8 verification samples at temperature ~0.7-1.0 (few-shot, 3-5 verification exemplars); escalate when p < 0.5-0.7 depending on lambda; fit the POMDP/threshold on 200-500 validation items; cap cascade depth at 3 models; prefer execution-based verification (tests, schema checks) over LLM self-verification whenever available (Large Language Monkeys shows LLM/majority verifiers plateau beyond several hundred samples)."
+  },
+  {
+   "name": "Orchestrator-workers with explicit effort scaling and structured artifacts",
+   "description": "A planner LLM receives the natural-language task plus a complexity estimate (from a small classifier or the planner itself) and emits a structured plan: list of subtasks with objective, output schema, allowed tools, and per-subtask budgets (max tool calls, max tokens, model tier). An effort policy maps complexity to fan-out: trivial = 1 worker, 3-10 tool calls; moderate = 2-4 workers, 10-15 calls each; complex = up to 10+ workers with disjoint responsibilities. Workers run in parallel (Send/map step in a state graph), return schema-validated artifacts (MetaGPT-style PRD/design/task-list/test-report documents rather than chat), and a synthesizer merges them. A final verification worker checks the merged result against the original task objective (MAST's highest-yield intervention). Termination conditions (max super-steps, max cost, success predicate) are explicit in state.",
+   "source_titles": [
+    "Building Effective Agents",
+    "How we built our multi-agent research system",
+    "MetaGPT: Meta Programming for A Multi-Agent Collaborative Framework",
+    "Why Do Multi-Agent LLM Systems Fail?",
+    "LangGraph Graph API (StateGraph, reducers, Send, Command, persistence)"
+   ],
+   "when_to_use": "Tasks whose subtasks cannot be enumerated in advance and are independent enough to parallelize (multi-document requirements analysis, cross-system incident investigation, BOM/spec reconciliation); high-value tasks where a ~15x token multiplier versus a single chat call is justified.",
+   "tradeoffs": "Anthropic reports multi-agent systems use ~15x chat tokens and only pay off on parallelizable, high-value work; MAST reports 41-86.7% failure rates in open-source MAS, dominated by step repetition (15.7%), reasoning-action mismatch (13.2%), unawareness of termination (12.4%) and disobeying task spec (11.8%). Coordination overhead and context loss between workers are the main risks; mitigated by structured artifacts and a verification stage.",
+   "default_parameters": "Fan-out 3-5 parallel workers per orchestrator step (Anthropic); per-worker tool-call budget 3-15 by complexity; 3+ parallel tool calls per worker where independent; max 3 self-repair retries per worker (MetaGPT); mandatory final objective-verification step (+15.6% success in MAST ChatDev experiment); role specifications written as explicit SOPs (+9.4%); recursion/super-step limit set well below LangGraph's 1000 default (e.g., 50-100 for bounded tasks) with hard cost ceiling per run."
+  },
+  {
+   "name": "Evaluator-optimizer / reflection loop with execution-grounded feedback and bounded iterations",
+   "description": "Generate an output; run an evaluator that is preferably programmatic (unit tests, compiler, linter, schema validator, simulation, requirement-trace check) and otherwise an LLM judge with a rubric producing a score in [0,1] and structured feedback; if score < theta and iterations < N_max, feed the feedback (not just 'try again') back to the generator and repeat; otherwise return best-so-far with its score. Kapoor's 'retry' and 'warming' baselines are the degenerate case (resample with increasing temperature until tests pass) and sit on the Pareto frontier.",
+   "source_titles": [
+    "Building Effective Agents",
+    "Agentic Design Patterns Part 1 (How Agents Can Improve LLM Performance)",
+    "MetaGPT: Meta Programming for A Multi-Agent Collaborative Framework",
+    "AI Agents That Matter"
+   ],
+   "when_to_use": "Any task with a checkable success criterion (code, structured extraction, spec conformance, test-log triage with ground truth), and open-ended writing where a rubric exists; before escalating to a larger model.",
+   "tradeoffs": "Each iteration multiplies cost and latency; LLM judges share the generator's blind spots and can be gamed (MAST: incorrect verification 9.1% of failures); unbounded loops are a classic failure. Executable feedback adds +4.2 HumanEval / +5.4 MBPP in MetaGPT; retry/warming reach 92-93% HumanEval at ~$2.5 vs LATS at $134.50.",
+   "default_parameters": "N_max = 3 iterations (MetaGPT retry cap; Kapoor's retry baseline uses up to 5 attempts); warming schedule temperature 0 -> 0.5 across retries; acceptance threshold theta = 1.0 for programmatic checks, ~0.8 for rubric judges; judge must be a different model or prompt than the generator; log every iteration as a child span."
+  },
+  {
+   "name": "Programmatic pipeline compilation from traces (DSPy / Trace)",
+   "description": "Declare each pipeline stage as a module with a typed signature (input fields -> output fields) and leave prompts, few-shot demos and small code parameters as trainable. Given a training set of (input, expected output or metric) pairs, run a compiler: bootstrap demonstrations by executing the pipeline with a teacher config, keep traces that pass the metric, select demo subsets by random search or Bayesian optimization, and optionally fine-tune a small model on the traces. In Trace/OPTO, the optimizer LLM receives the execution trace plus feedback and proposes updates to any trainable node (prompt text, code, hyperparameters), iterating until the metric stops improving. Recompile when domain, model or metric changes.",
+   "source_titles": [
+    "DSPy: Compiling Declarative Language Model Calls into Self-Improving Pipelines",
+    "Trace is the Next AutoDiff: Generative Optimization with Rich Feedback, Execution Traces, and LLMs",
+    "AI Agents That Matter"
+   ],
+   "when_to_use": "Whenever the component is deployed to a new domain or model (engineering sub-domains differ: requirements vs test logs vs CAD metadata); when a metric and a few dozen to a few hundred examples exist; to make small/cheap models competitive (DSPy: 770M T5 and llama2-13b compiled programs competitive with expert GPT-3.5 chains).",
+   "tradeoffs": "Compilation costs LLM calls (minutes to hours) and needs a trustworthy metric; optimized prompts can overfit the dev set (Kapoor: joint cost-accuracy optimization breaks even after ~1,300 tasks); Trace-style code rewriting requires sandboxing and review before deployment.",
+   "default_parameters": "Training set of 50-300 examples with a held-out set of equal size; DSPy library defaults of 4 bootstrapped and up to 16 labeled demos per module as a starting point; optimize jointly for accuracy and cost (Kapoor: 41-53% variable-cost reduction at maintained accuracy); recompile on model change; keep compiled artifacts versioned alongside code."
+  },
+  {
+   "name": "Stateful graph execution with checkpointing, idempotent nodes and reliability wrappers",
+   "description": "Represent the pipeline as a typed state graph: State schema with reducers (replace by default, append for message/evidence lists), nodes as pure functions returning partial updates, conditional edges for routing, Send for dynamic fan-out, checkpoint after each super-step to durable storage keyed by run/thread id. Each external call (model, tool, retriever) is wrapped in: a deadline derived from the run's remaining budget; a retry policy with randomized exponential backoff and a per-call attempt cap, charged against a global retry budget; error classification (retriable: 429/5xx/timeouts; non-retriable: 4xx validation, guardrail blocks); a per-provider circuit breaker (closed/open/half-open) with fallback route; and per-provider/per-tenant concurrency bulkheads. Idempotency keys (hash of node name + input state) guard resumed nodes and side-effecting tools. Support interrupts for human approval.",
+   "source_titles": [
+    "LangGraph Graph API (StateGraph, reducers, Send, Command, persistence)",
+    "Addressing Cascading Failures (Site Reliability Engineering: How Google Runs Production Systems, Ch. 22)",
+    "Release It! Design and Deploy Production-Ready Software, 2nd Edition",
+    "How we built our multi-agent research system"
+   ],
+   "when_to_use": "Always, for any multi-step or long-running pipeline in production; essential when runs span minutes, involve side-effecting tools (ticket creation, repo writes) or must survive deployments.",
+   "tradeoffs": "Checkpointing adds storage and small latency per step; replay semantics require idempotent nodes (LangGraph re-runs the interrupted node from the start); circuit breakers can trip on transient bursts (tune thresholds); retries without budgets amplify outages (4 attempts x 3 layers = 64x load).",
+   "default_parameters": "Backoff base 0.5-1 s, factor 2, full jitter, max 3 attempts per call (SRE: never indefinite; 10 attempts shown harmful); global retry budget ~10% of request volume or a fixed per-process rate (SRE example 60/min); one end-to-end deadline propagated with remaining-time checks before each stage; circuit breaker opens at >=50% error rate over a 10-20 request window, half-open probe after 30 s; bulkhead concurrency per provider sized to rate limits; recursion limit explicit per task class (LangGraph default 1000 is far too high for bounded tasks)."
+  },
+  {
+   "name": "Standardized GenAI observability with cost and failure-mode telemetry",
+   "description": "Emit OpenTelemetry spans for every operation using gen_ai.* conventions: one span per inference (gen_ai.operation.name=chat, request/response model, provider, finish reasons, error.type), per tool call ('execute_tool {name}'), per agent invocation ('invoke_agent {name}'), per workflow ('invoke_workflow {name}') and per plan step; propagate gen_ai.conversation.id and a run id across the graph. Record counters gen_ai.client.inference.usage.input_tokens/output_tokens/cache_read.input_tokens/cache_write.input_tokens/reasoning.output_tokens and histograms gen_ai.client.operation.duration, gen_ai.server.time_to_first_token, gen_ai.server.time_per_output_token with the spec's bucket boundaries; derive cost per run from tokens x price table. Keep prompt/response content opt-in with redaction. Add a trace-judge job that labels sampled runs with the 14 MAST failure modes and alerts on drift.",
+   "source_titles": [
+    "OpenTelemetry Semantic Conventions for Generative AI (spans, agent spans, metrics, token metrics)",
+    "Why Do Multi-Agent LLM Systems Fail?",
+    "The Shift from Models to Compound AI Systems",
+    "Trace is the Next AutoDiff: Generative Optimization with Rich Feedback, Execution Traces, and LLMs"
+   ],
+   "when_to_use": "Always in production; mandatory for cost-controlled evaluation, router/cascade retraining, DSPy/Trace optimization and incident forensics.",
+   "tradeoffs": "Content capture raises PII/IP concerns (spec marks content attributes opt-in); high-cardinality attributes (response ids) must be excluded from span names; LLM-as-judge trace labeling costs tokens (MAST judge reaches 94% accuracy, kappa 0.77 with few-shot o1).",
+   "default_parameters": "Duration histogram buckets 0.01-81.92 s doubling; TTFT buckets 0.001-10 s; token histogram buckets powers of 4 from 1 to 67,108,864; content capture off by default with per-environment opt-in; sample 1-5% of runs for MAST labeling; SLOs on p95 operation duration, cost per successful run, routed-to-strong fraction, verification failure rate and false-refusal rate."
+  },
+  {
+   "name": "Layered guardrails: classifier in/out, programmable rails, policy-derived classifiers",
+   "description": "Stage 0 (input): run a small safety/policy classifier (Llama-Guard-class, taxonomy customized via prompt) plus deterministic rails (regex/PII detectors, allowed-topic lists, injection heuristics) before any expensive call; block or route to a safe handler. Stage N (output): run the response-classification variant plus programmatic checks (schema validity, citation presence, no secret leakage). Tool rails: allowlist tools per task class, validate arguments, require human approval for side effects. Policies are written as a natural-language constitution/rail spec from which classifier training data is synthesized (Constitutional Classifiers) so domain policies can change without hand-labeling.",
+   "source_titles": [
+    "Llama Guard: LLM-based Input-Output Safeguard for Human-AI Conversations",
+    "NeMo Guardrails: A Toolkit for Controllable and Safe LLM Applications with Programmable Rails",
+    "Constitutional Classifiers: Defending against Universal Jailbreaks across Thousands of Hours of Red Teaming",
+    "Building Effective Agents"
+   ],
+   "when_to_use": "Any externally exposed or tool-using pipeline; engineering deployments handling export-controlled, safety-critical or proprietary data; whenever tools can take irreversible actions.",
+   "tradeoffs": "Classifier layers add latency and compute (Constitutional Classifiers: 23.7% overhead) and false refusals (+0.38% absolute); Llama Guard AUPRC 0.847-0.953 depending on dataset means a non-trivial miss rate, so combine with deterministic rails; rails must be model-independent so router/cascade swaps do not alter policy.",
+   "default_parameters": "7-8B class classifier on inputs and outputs with domain taxonomy of 6-10 categories; deterministic rails first (sub-millisecond) then classifier; false-refusal SLO under 1% absolute; human approval required for any tool with external side effects; policy and rail configs versioned and tested with a red-team suite in CI."
+  },
+  {
+   "name": "Repeated sampling with automatic verification (coverage scaling)",
+   "description": "For tasks with an automatic verifier V (tests, compiler, constraint checker, simulation), draw n independent samples from the cheapest adequate model at temperature T (optionally prefix-cached to amortize the prompt), run V on each, and return the first/best verified sample; if none verifies, escalate model tier or fall back to majority vote. Coverage follows c(n) ~ exponentiated power law in log n, so choose n by the marginal cost per additional solved problem; where V is unavailable, use self-consistency voting with small n since gains plateau.",
+   "source_titles": [
+    "Large Language Monkeys: Scaling Inference Compute with Repeated Sampling",
+    "Self-Consistency Improves Chain of Thought Reasoning in Language Models",
+    "Efficient Memory Management for Large Language Model Serving with PagedAttention",
+    "SGLang: Efficient Execution of Structured Language Model Programs"
+   ],
+   "when_to_use": "Code generation and repair, formal/structured outputs, configuration synthesis, any engineering task with tests or checkers; discrete-answer reasoning tasks (voting).",
+   "tradeoffs": "Linear cost in n (mitigated by KV/prefix sharing on vLLM/SGLang and by small models); verifier quality bounds the result (false positives in tests pass wrong code); without verifiers majority voting and reward models plateau beyond several hundred samples; SWE-bench Lite 15.9% -> 56% needed 250 samples.",
+   "default_parameters": "Self-consistency: n = 5-10 samples at T ~0.7 for voting (paper used up to 40; most gain by ~10-20); verified sampling: start at n = 8-32 on the cheap tier and scale by log-linear coverage until marginal cost per solved task exceeds the strong-model cost; always place the shared prompt prefix first to maximize RadixAttention/prefix-cache hits."
+  }
+ ],
+ "architecture_recommendations": [
+  "1. Build the component as a typed state-graph runtime (LangGraph-style StateGraph with reducers, conditional edges, Send fan-out, Command routing, checkpointer) whose nodes are drawn from a fixed library of workflow primitives: chain, route, parallel-section, vote, orchestrator-workers, evaluator-optimizer, bounded ReAct agent, cascade, verify, guard. The natural-language task prompt enters a Planner node that selects and parameterizes primitives into a plan artifact (JSON schema: subtasks, dependencies, output schemas, budgets, model tiers, tools, verifiers); the plan is logged as a 'plan' span and is human-readable (Anthropic's transparency principle).",
+  "2. Make every design decision a configuration field with a literature-justified default and a domain override: model tier ladder and prices, router type and threshold (PGR/CPT target), cascade depth and scorer, sampling n and verifier, iteration caps (default 3), effort-scaling table (complexity -> workers x tool calls), recursion/super-step limit, cost ceiling per run, deadline, retry/backoff/circuit-breaker/bulkhead settings, guardrail taxonomy, and observability opt-ins. Ship domain profiles (code, requirements, standards, test logs, incident reports, CAD/BOM) as config overlays, not code forks.",
+  "3. Separate structure from parameters following DSPy/Trace: node prompts, few-shot demos, scorer thresholds and small glue code are declared trainable and compiled per domain from a 50-300 example set plus a metric; store compiled artifacts versioned with the config. Provide a 'recompile' CLI/job triggered by model or domain change and a joint cost-accuracy objective (Kapoor et al.).",
+  "4. Implement a Model Access Layer that hides providers behind a cost-aware policy: preference/difficulty router for single-shot calls, cascade with learned stopping for batch/latency-tolerant calls, self-verification fallback for cold start, and per-provider circuit breakers with fallback routes. Expose a runtime quality knob (Hybrid LLM) per tenant/task class and emit routed-fraction and PGR metrics for continuous recalibration.",
+  "5. Enforce MAST-informed guardrails on execution: explicit termination predicates in state, step-repetition/loop detection (hash of consecutive actions), conversation-history integrity (artifact passing rather than chat), reasoning-action consistency checks for tool calls, mandatory final verification against the original task objective, and schema validation of every inter-stage artifact (structured outputs via constrained decoding).",
+  "6. Treat verification as a first-class, pluggable node type with a hierarchy of verifiers: deterministic/programmatic (tests, compilers, schema, unit conversions, requirement-trace matrices) > retrieval-grounded checks > independent LLM judge with rubric > generator self-check. The Planner must pick the strongest available verifier, and repeated sampling is only enabled when a deterministic verifier exists.",
+  "7. Wrap all external calls in a reliability kernel: single propagated deadline with remaining-time checks, randomized exponential backoff with max 3 attempts and a global retry budget, retriable/non-retriable error classification, idempotency keys for resumed nodes and side-effecting tools, per-provider and per-tenant bulkheads, load shedding with explicit degraded modes (smaller model, cached answer, skip optional stage), and rainbow/blue-green deployment for long-running runs.",
+  "8. Instrument with OpenTelemetry GenAI semantic conventions end to end (inference, execute_tool, invoke_agent, invoke_workflow, plan spans; token counters including cache_read/cache_write; duration/TTFT histograms with standard buckets), derive cost per run, keep content capture opt-in with redaction, and run a sampled trace-judge that labels runs with the 14 MAST failure modes and feeds dashboards, alerts and router/compiler retraining.",
+  "9. Layer safety and policy independently of models: deterministic rails -> input classifier -> pipeline -> output classifier -> programmatic output checks; tool allowlists per task class with human-approval interrupts for side effects; policies expressed as a written constitution/rail spec from which classifier data is synthesized; false-refusal and overhead tracked as SLOs.",
+  "10. Govern evaluation like Kapoor et al.: every configuration change is evaluated on a cost-accuracy Pareto frontier against mandatory simple baselines (zero-shot strong model, retry/warming, escalation), with holdout sets matched to the intended generality (in-distribution, task-level, domain-level), fixed seeds and model versions, and a small curated query set (~20 cases) plus rubric LLM-judge for fast iteration followed by human review.",
+  "11. Favor serving-level efficiency for self-hosted tiers: paged-KV engines (vLLM) with prefix/radix caching (SGLang), prompts arranged shared-prefix-first, constrained JSON decoding for artifacts, and batching of parallel branches; measure with TTFT and time-per-output-token histograms.",
+  "12. Provide a stable plugin contract so the component sits inside a larger pipeline: input = {task_prompt, context_refs, constraints (budget, deadline, quality level, policy profile), tool registry, verifier registry}; output = {result artifact, confidence/verification report, plan, cost/latency/token accounting, trace id}; all side effects via registered tools only; stateless between runs except through explicit memory stores (CoALA episodic/semantic/procedural)."
+ ],
+ "pitfalls": [
+  "Over-engineering before baselines: complex agents (LATS at $134.50 for 88.0% HumanEval) lose to retry/warming ($2.45 for 93.2%) on the cost-accuracy frontier (Kapoor et al., AI Agents That Matter). Mitigate: mandatory simple baselines and Pareto evaluation; Anthropic's 'start simple' rule.",
+  "Multi-agent systems failing 41-86.7% of the time with step repetition (15.7%), reasoning-action mismatch (13.2%), unawareness of termination (12.4%), disobeying task spec (11.8%), incorrect verification (9.1%) (Cemri et al., MAST). Mitigate: explicit termination predicates, loop detection, SOP-style role specs, structured artifacts, final objective verification (+15.6%).",
+  "Cascading hallucinations from naive LLM chaining where each stage trusts the previous free-form output (MetaGPT). Mitigate: schema-validated intermediate artifacts and per-stage input checks.",
+  "Token-cost blowup: agents ~4x and multi-agent ~15x chat tokens, token usage explaining ~80% of performance variance (Anthropic multi-agent research system). Mitigate: effort-scaling policy, per-run cost ceilings, gate multi-agent mode on task value and parallelizability.",
+  "Miscalibrated routers/cascade scorers leaking wrong cheap answers or wasting strong calls; routers trained on chat preferences misjudging domain difficulty (RouteLLM, FrugalGPT, AutoMix). Mitigate: in-domain golden-label augmentation, PGR/CPT monitoring, cascade fallback behind the router, periodic recalibration when models/prices change.",
+  "Repeated sampling without a reliable verifier: majority voting and reward models plateau beyond several hundred samples; test false positives pass wrong code (Large Language Monkeys). Mitigate: enable large n only with deterministic verifiers; cap voting n at 5-20.",
+  "Retry amplification and cascading failures: multi-layer retries (4^3 = 64x), un-jittered backoff, indefinite retries (Google SRE). Mitigate: randomized exponential backoff, per-call cap of ~3, global retry budget, single propagated deadline, retry only at one layer.",
+  "Unbounded loops and missing idempotency in stateful graphs: LangGraph's resume re-runs the interrupted node, and the default recursion limit (1000) is far above any bounded task. Mitigate: idempotency keys, task-class recursion limits, checkpoint at super-steps.",
+  "Benchmark overfitting and irreproducibility: 7 of 17 agent benchmarks have no holdout; reported accuracies exceeding reproduction maxima; hardcoded task policies (Kapoor et al.). Mitigate: generality-matched holdouts, pinned model versions, seeds, published cost.",
+  "Optimized prompts overfitting the dev set and compile cost exceeding benefit for low-volume tasks (DSPy; Kapoor: break-even ~1,300 tasks). Mitigate: hold-out evaluation, recompile only on drift, estimate volume before compiling.",
+  "Observability gaps and PII leakage in traces: content attributes marked opt-in because they contain user data (OTel GenAI); Zaharia et al. name trace monitoring as an unsolved operational challenge. Mitigate: adopt gen_ai.* conventions, redact content, exclude high-cardinality ids from span names.",
+  "Guardrail cost and false refusals: classifier layers add ~23.7% overhead and +0.38% refusals (Constitutional Classifiers); single-classifier miss rates (Llama Guard AUPRC 0.63-0.95 by dataset). Mitigate: deterministic rails first, model-independent rails (NeMo), false-refusal SLO, red-team suite in CI.",
+  "Poor tool interfaces (agent-computer interface) causing systematic errors, e.g., relative vs absolute paths (Anthropic Building Effective Agents). Mitigate: poka-yoke tool schemas, examples and error messages tested like UX.",
+  "Non-differentiable, co-dependent components making end-to-end optimization and budget allocation hard (Zaharia et al.). Mitigate: trace-based generative optimization (Trace/OPTO, DSPy) and explicit latency/cost budget allocation per stage."
+ ],
+ "evaluation_metrics": [
+  "Task accuracy / success rate with confidence intervals over >=5 runs, reported jointly with cost (Pareto frontier) and against simple baselines (zero-shot strong model, retry/warming, escalation)",
+  "Cost per successful run (USD) derived from gen_ai token counters x price table; cost-controlled accuracy at fixed budgets",
+  "Performance Gap Recovered (PGR), Average PGR, and Call-Performance Threshold (CPT) for routers; fraction of calls routed to the strong tier; cascade tier distribution",
+  "Latency: p50/p95 end-to-end duration, gen_ai.client.operation.duration, time-to-first-token and time-per-output-token histograms (OTel bucket boundaries)",
+  "Token accounting: input/output/cache_read/cache_write/reasoning tokens per run; token multiplier vs single-call baseline (agents ~4x, multi-agent ~15x reference)",
+  "Coverage@n and pass@k for sampled-and-verified tasks; verifier precision/recall; iteration count distribution in evaluator-optimizer loops",
+  "MAST failure-mode rates per run (14 modes, 3 categories) from an LLM-as-judge trace labeler validated against human annotation (target judge accuracy >=90%, kappa >=0.75)",
+  "Reliability: retry rate, retry-budget exhaustion, circuit-breaker open time per provider, timeout/deadline-exceeded rate, idempotency violations, resume success rate",
+  "Safety: guardrail block rate, false-refusal rate (absolute, target <1%), jailbreak/red-team suite pass rate, guardrail latency overhead",
+  "Robustness and generalization: held-out performance at the appropriate generality level (in-distribution, task-level, domain-level), variance across seeds and model versions, reproducibility of reported numbers",
+  "Prefix/KV cache hit rate and throughput (tokens/s) for self-hosted tiers; cache_read token share",
+  "Human review metrics: revision cost/edits required (MetaGPT 'human revision cost'), rubric scores (factual accuracy, citation accuracy, completeness, source quality, tool efficiency)"
+ ],
+ "engineering_adaptation_notes": [
+  "Code: use execution-grounded verifiers (unit tests, compilers, linters, type checkers) as the evaluator in reflection loops and as the gate for repeated sampling (Large Language Monkeys: SWE-bench Lite 15.9% -> 56% with 250 verified samples); MetaGPT-style structured artifacts (design doc, task list, test report) between stages; cap self-repair at 3 iterations.",
+  "Specifications and requirements: encode review SOPs as role prompts (author, reviewer, verifier) with schema-validated outputs (requirement id, acceptance criterion, trace links); use deterministic verifiers such as requirement-trace matrix completeness, unit/dimension consistency, and cross-reference resolution before any LLM judge.",
+  "Standards documents and compliance: route by difficulty so clause lookups go to cheap tiers while interpretation/conflict analysis escalates; guardrails must include export-control/IP taxonomies defined via Llama-Guard-style custom taxonomies or constitution-derived classifiers; keep prompt/response content capture opt-in due to proprietary data.",
+  "Test logs and telemetry: prefer programmatic parsing and aggregation nodes (regex, log schemas) before LLM nodes; parallel-section long logs by time window or subsystem with Send fan-out; verify conclusions by re-querying the raw log (reasoning-action consistency check).",
+  "Incident reports and postmortems: orchestrator-workers across data sources (alerts, deploy history, tickets) with effort scaling by severity; a CitationAgent-style attribution step that ties every claim to evidence; evaluator rubric on factual accuracy, completeness and source quality.",
+  "CAD/BOM metadata: treat as structured retrieval + tool use rather than free generation; constrained JSON decoding for part/quantity outputs; deterministic verifiers for BOM arithmetic, unit conversions and part-number formats; cache aggressively since queries repeat across revisions.",
+  "Cost-sensitive high-volume engineering queries (classification of tickets, extraction from datasheets): FrugalGPT cascade or RouteLLM router with ~1.5k in-domain golden labels; expect 40-75% fewer strong-model calls at matched quality based on reported results.",
+  "Deployment in engineering orgs: long-running runs over large document sets require checkpointing, rainbow deployments, deadline propagation and per-tenant bulkheads; export OTel gen_ai.* telemetry into existing APM to meet audit and cost-allocation requirements."
+ ],
+ "composition_notes": [
+  "Hybrid retrieval: CoALA's internal 'retrieval' action is where hybrid retrieval plugs into working memory; the Planner decides when to retrieve and the router can send retrieval-heavy queries to cheaper models since grounding reduces difficulty; OTel defines 'retrieval' spans with gen_ai.data_source.id so retrieval latency sits in the same trace; Kapoor et al. note RAG can be >20x cheaper than long-context reading at equal accuracy.",
+  "Task decomposition: the orchestrator-workers and prompt-chaining primitives are the execution side of decomposition; the Planner emits the decomposition as a schema-validated plan artifact with per-subtask budgets (effort-scaling table), and MAST's 'disobey task specification' and 'task derailment' failure modes are monitored per subtask; DSPy/Trace can compile the decomposition prompts per domain.",
+  "Answer verification: evaluator-optimizer loops, AutoMix self-verification and MAST's final objective-verification step are all instances of the verification component; the architecture routes to the strongest available verifier (programmatic > grounded > LLM judge) and uses verification signals as the cascade stopping criterion and as the router's training labels.",
+  "Parallelization: sectioning (Send fan-out), voting (self-consistency, n = 5-10), repeated sampling with verifiers (coverage scaling) and parallel tool calls (3+ per worker, up to 90% time reduction) are scheduled by the state-graph runtime within bulkhead concurrency limits and the global deadline; serving-level prefix caching (vLLM/SGLang) makes parallel branches cheap.",
+  "Caching: FrugalGPT's 'LLM approximation' strategy (completion cache) and OTel's cache_read/cache_write token counters make caching measurable; prefix/KV caching (RadixAttention) rewards shared-prefix prompt layout; LangGraph node caching with TTL caches deterministic nodes; CoALA's semantic/procedural memory stores and DSPy compiled demos are long-lived caches of knowledge and prompts; SRE guidance uses cached answers as a degraded mode under load shedding.",
+  "Pipeline RAG: the end-to-end RAG pipeline is the canonical compound AI system (Zaharia et al.: ~60% of LLM apps); this component provides its control plane: routing of queries by difficulty, cascade over generators, verification of groundedness, parallel multi-query retrieval, caching of embeddings/answers, guardrails on inputs/outputs, and OTel tracing across retriever and generator with an explicit latency budget split (e.g., 20 ms retrieval / 80 ms generation in a 100 ms budget).",
+  "Prompting/architecture best practices: Anthropic's ACI/tool-design guidance and simplicity-first rule govern node and tool schemas; ReAct structure for bounded agent loops; self-consistency and reflection as inference-time scaling knobs; constrained JSON decoding for all inter-component artifacts; evaluation per Kapoor et al. (cost-controlled, holdouts, reproducibility) applies to every component jointly."
+ ],
+ "_status": "DRAFT: pre-critique, pre-verification. Replaced by verified dossier when the research workflow completes."
+}
